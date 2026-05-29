@@ -445,8 +445,12 @@ const handleLogin = async (e: React.FormEvent) => {
             <div key={cafe.id} className="cafe-card" onClick={() => setSelectedCafe(cafe)}>
               <img src={cafe.imageUrl} className="cafe-img" alt={cafe.name} onError={e => (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=800'} />
               <div className="cafe-info">
-                <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
-                <div style={{marginTop: '1.2rem', color: 'var(--primary)', fontWeight: 'bold', fontSize: '0.9rem', borderTop: '1px solid #f0f0f0', paddingTop: '1.5rem'}}>View full menu →</div>
+                <h3>{cafe.name}</h3>
+                <p className="cafe-loc">{cafe.location}</p>
+                <div className="view-menu-btn">
+                  <span>View full menu</span>
+                  <span>→</span>
+                </div>
               </div>
             </div>
           ))}
