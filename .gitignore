@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+
+# Database
+*.db
+cafeteria.db
+
+# Node / React
+node_modules/
+frontend/node_modules/
+.npm-cache/
+frontend/.npm-cache/
+dist/
+frontend/dist/
+.DS_Store
+
+# Logs
+*.log
+frontend/npm-debug.log*
+
+# Static/Uploads (Optional - usually better to keep on server, not Git)
+uploads/
