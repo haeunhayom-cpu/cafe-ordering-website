@@ -26,9 +26,6 @@ os.makedirs("uploads", exist_ok=True)
 # React build puts assets in 'dist/assets'
 if os.path.exists("frontend/dist"):
     app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
-    # Also mount any public images
-    if os.path.exists("frontend/dist/images"):
-        app.mount("/images", StaticFiles(directory="frontend/dist/images"), name="images")
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
@@ -48,6 +45,14 @@ def get_current_admin(request: Request):
 @app.on_event("startup")
 def startup():
     init_db()
+    # Auto-seed if menu is empty (Essential for Render deployment)
+    if MenuItem.select().count() == 0:
+        try:
+            from seed import seed
+            seed()
+            print("Database auto-seeded successfully.")
+        except Exception as e:
+            print(f"Auto-seed failed: {e}")
 
 # --- Auth API Routes (POST only, GET is handled by React) ---
 
@@ -140,15 +145,28 @@ async def mark_order_ready(order_id: int):
 
 # --- Catch-all to serve React App ---
 
-@app.get("/{path:path}")
-async def serve_react(path: str):
-    # If file exists in public/images, serve it
-    public_file = os.path.join("frontend/public", path)
-    if os.path.isfile(public_file):
-        return FileResponse(public_file)
-        
-    # Otherwise serve index.html for React routing
+@app.get("/")
+async def serve_index():
     index_file = "frontend/dist/index.html"
     if os.path.exists(index_file):
         return FileResponse(index_file)
-    return HTMLResponse(content="Frontend not built. Please run 'cd frontend && npm run build'", status_code=404)
+    return HTMLResponse(content="Frontend build not found. Please run 'npm run build'", status_code=404)
+
+@app.get("/{path:path}")
+async def serve_react(path: str):
+    # 1. Check in dist (built assets)
+    dist_path = os.path.join("frontend/dist", path)
+    if os.path.isfile(dist_path):
+        return FileResponse(dist_path)
+
+    # 2. Check in public (fallback)
+    public_path = os.path.join("frontend/public", path)
+    if os.path.isfile(public_path):
+        return FileResponse(public_path)
+        
+    # 3. SPA Fallback
+    index_file = "frontend/dist/index.html"
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    
+    return JSONResponse(content={"error": "Not Found"}, status_code=404)
