@@ -270,13 +270,6 @@ body {
   }
 }
 
-.best-option h2 {
-  margin: 0;
-  color: var(--text);
-  font-size: 2.5rem;
-  font-weight: 900;
-}
-
 .badge {
   background: var(--warm-accent);
   color: var(--primary);
@@ -558,6 +551,11 @@ body {
   animation: slideIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
 .admin-nav-btn {
   background: white;
   border: 2px solid var(--primary);
@@ -614,6 +612,29 @@ body {
   font-size: 1.4rem;
 }
 
+.remove-btn {
+  background: #f5f5f5; /* Very light grey background */
+  border: none;
+  color: #999;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.3s ease;
+  margin-left: 3rem; /* Significantly increased spacing from the price */
+  flex-shrink: 0; /* Prevent the button from shrinking */
+}
+
+.remove-btn:hover {
+  background: var(--high); /* Red color on hover */
+  color: white;
+  transform: rotate(90deg) scale(1.1); /* Subtle interaction effect */
+}
+
 .admin-header {
   border-bottom: 3px solid #000;
   padding-bottom: 3rem;
@@ -657,10 +678,10 @@ body {
 }
 
 .order-items-list li {
-  padding: 0.6rem 0;
-  border-bottom: 1.5px solid rgba(0,0,0,0.05);
+  padding: 0.8rem 0;
+  border-bottom: 1.5px solid #f9f9f9;
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
 }
 
 .order-items-list li:last-child {
