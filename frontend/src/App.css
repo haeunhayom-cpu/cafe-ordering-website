@@ -360,7 +360,8 @@ body {
   padding-top: 2rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center; /* Center-align the text and arrow */
+  gap: 0.8rem; /* Space between text and arrow */
   letter-spacing: 0.5px;
 }
 
