@@ -54,7 +54,7 @@ function App() {
   const loadMenu = async () => {
     try {
       console.log("Attempting to fetch menu...");
-      const res = await fetch('http://localhost:8000/api/menu');
+      const res = await fetch('/api/menu');
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       console.log("Menu successfully loaded:", data);
@@ -85,7 +85,7 @@ function App() {
     let interval: any;
     if (activeOrderId && activeOrderStatus !== 'ready' && activeOrderStatus !== 'picked_up') {
       interval = setInterval(() => {
-        fetch(`http://localhost:8000/api/order/${activeOrderId}`)
+        fetch(`/api/order/${activeOrderId}`)
           .then(res => res.json())
           .then(data => {
             if (data.status !== activeOrderStatus) {
@@ -103,7 +103,7 @@ function App() {
     let interval: any;
     if (viewMode === 'admin' && user?.is_admin && adminSelectedCafe) {
       const fetchOrders = () => {
-        fetch('http://localhost:8000/admin/api/orders')
+        fetch('/admin/api/orders')
           .then(res => res.json())
           .then(data => setAllOrders(Array.isArray(data) ? data : []))
           .catch(err => console.error('Admin orders fetch error:', err));
@@ -113,27 +113,45 @@ function App() {
     }
     return () => clearInterval(interval);
   }, [viewMode, user, adminSelectedCafe]);
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setAuthError(null);
 
-  // --- HANDLERS ---
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
+  // Attempt backend login first
+  try {
+    const formData = new FormData();
+    formData.append('username', loginForm.username);
+    formData.append('password', loginForm.password);
+
+    const endpoint = viewMode === 'admin' ? '/admin/login' : '/login';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (res.ok) {
+      // Success
+      setUser({ username: loginForm.username, is_admin: viewMode === 'admin' });
+      return;
+    } else {
+      const errorData = await res.json();
+      setAuthError(errorData.error === 'invalid' ? 'Invalid username or password' : 'Login failed');
+    }
+  } catch (err) {
+    console.error("Login error:", err);
+    // Fallback for simple hardcoded check for testing if backend is down
     const u = loginForm.username.toLowerCase();
     const p = loginForm.password;
-    if (viewMode === 'admin') {
-      if (u === 'admin' && p === 'password123') {
-        setUser({ username: 'admin', is_admin: true });
-        return;
-      }
-      setAuthError('Invalid Admin credentials');
-    } else {
-      if (u === 'student' && p === 'password123') {
-        setUser({ username: 'student', is_admin: false });
-        return;
-      }
-      setAuthError('Invalid Student credentials');
+    if (viewMode === 'admin' && u === 'admin' && p === 'password123') {
+      setUser({ username: 'admin', is_admin: true });
+      return;
+    } else if (viewMode === 'student' && u === 'student' && p === 'password123') {
+      setUser({ username: 'student', is_admin: false });
+      return;
     }
-  };
+    setAuthError('Connection error to server');
+  }
+};
 
   const handleLogout = () => {
     setUser(null);
@@ -201,7 +219,7 @@ function App() {
       });
 
       const cafeName = cartCafeName || 'Forum Café';
-      const response = await fetch('http://localhost:8000/api/order', {
+      const response = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -234,7 +252,7 @@ function App() {
 
   const markReady = async (orderId: number) => {
     try {
-        const response = await fetch(`http://localhost:8000/admin/api/order/${orderId}/ready`, { method: 'POST' });
+        const response = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
         if (response.ok) {
             setAllOrders(prev => prev.filter(o => o.id !== orderId));
         }
@@ -243,7 +261,6 @@ function App() {
     }
   };
 
-  const bestCafe = useMemo(() => [...CAFE_DATA].sort((a, b) => a.waitingTime - b.waitingTime)[0], []);
   const filteredCafes = useMemo(() => filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location.includes(filter)), [filter]);
   const locations = ['All', 'Central campus', 'Social Sciences Building', 'Humanities Building', 'Rothberg area'];
 
