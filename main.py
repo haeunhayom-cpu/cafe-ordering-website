@@ -3,9 +3,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from database import db, User, MenuItem, Order, OrderItem, init_db
-from peewee import IntegrityError
-import shutil
 import os
+import shutil
 import uuid
 
 app = FastAPI()
@@ -22,39 +21,31 @@ app.add_middleware(
 # Ensure directories exist
 os.makedirs("uploads", exist_ok=True)
 
-# Mount static files from React build
-# React build puts assets in 'dist/assets'
-if os.path.exists("frontend/dist"):
-    app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
-
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
-# Simple session mock (for isolation rule)
-def get_current_user(request: Request):
-    username = request.cookies.get("customer_session")
-    if not username:
-        return None
-    return User.get_or_none(User.username == username, User.is_admin == False)
-
-def get_current_admin(request: Request):
-    username = request.cookies.get("admin_session")
-    if not username:
-        return None
-    return User.get_or_none(User.username == username, User.is_admin == True)
+# Function to seed the database
+def seed_data():
+    if MenuItem.select().count() == 0:
+        print("Seeding database...")
+        items = [
+            {"name": "Hot Americano", "price": 10.0, "ingredients": "Espresso, Water", "stock_count": 100},
+            {"name": "Iced Latte", "price": 15.0, "ingredients": "Espresso, Milk, Ice", "stock_count": 50},
+            {"name": "Cappuccino", "price": 14.0, "ingredients": "Espresso, Milk", "stock_count": 80},
+            {"name": "Butter Croissant", "price": 12.0, "ingredients": "Flour, Butter", "stock_count": 20},
+            {"name": "Chocolate Muffin", "price": 11.0, "ingredients": "Cocoa, Flour, Egg", "stock_count": 15},
+            {"name": "Almond Danish", "price": 13.0, "ingredients": "Almonds, Flour, Syrup", "stock_count": 10},
+            {"name": "Tuna Sandwich", "price": 22.0, "ingredients": "Tuna, Veggies", "stock_count": 30},
+            {"name": "Omelet Bagel", "price": 20.0, "ingredients": "Egg, Cheese", "stock_count": 25},
+            {"name": "Healthy Salad", "price": 25.0, "ingredients": "Greens, Nuts", "stock_count": 40}
+        ]
+        for item in items:
+            MenuItem.create(**item)
+        print("Seeding complete.")
 
 @app.on_event("startup")
 def startup():
     init_db()
-    # Auto-seed if menu is empty (Essential for Render deployment)
-    if MenuItem.select().count() == 0:
-        try:
-            from seed import seed
-            seed()
-            print("Database auto-seeded successfully.")
-        except Exception as e:
-            print(f"Auto-seed failed: {e}")
+    seed_data()
 
-# --- Auth API Routes (POST only, GET is handled by React) ---
+# --- Auth API ---
 
 @app.post("/login")
 async def login(username: str = Form(...), password: str = Form(...)):
@@ -74,37 +65,27 @@ async def admin_login(username: str = Form(...), password: str = Form(...)):
     response.set_cookie(key="admin_session", value=username)
     return response
 
-@app.post("/logout")
-async def logout():
-    response = JSONResponse(content={"status": "success"})
-    response.delete_cookie("customer_session")
-    return response
-
-@app.post("/admin/logout")
-async def admin_logout():
-    response = JSONResponse(content={"status": "success"})
-    response.delete_cookie("admin_session")
-    return response
-
-# --- Data API Routes ---
+# --- Data API ---
 
 @app.get("/api/menu")
 async def get_menu():
     items = MenuItem.select().where(MenuItem.stock_count > 0, MenuItem.is_available == True)
-    return list(items.dicts())
+    result = list(items.dicts())
+    print(f"Returning {len(result)} menu items")
+    return result
 
 @app.post("/api/order")
-async def place_order(order_data: dict, user: User = Depends(get_current_user)):
+async def place_order(order_data: dict):
     item_ids = order_data.get("item_ids", [])
     cafe_name = order_data.get("cafe_name")
-    current_user = user or User.get_or_none(User.username == 'student')
+    
+    # Default to 'student' for simplicity in MVP
+    current_user = User.get_or_none(User.username == 'student')
     
     with db.atomic():
         new_order = Order.create(customer=current_user, cafe_name=cafe_name)
         for item_id in item_ids:
             item = MenuItem.get_by_id(item_id)
-            if item.stock_count <= 0:
-                raise HTTPException(status_code=400, detail=f"Item {item.name} out of stock")
             item.stock_count -= 1
             item.save()
             OrderItem.create(order=new_order, menu_item=item)
@@ -136,37 +117,27 @@ async def get_all_orders():
 
 @app.post("/admin/api/order/{order_id}/ready")
 async def mark_order_ready(order_id: int):
-    order = Order.get_or_none(Order.id == order_id)
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+    order = Order.get_by_id(order_id)
     order.status = "ready"
     order.save()
-    return {"status": "success", "order_id": order_id}
+    return {"status": "success"}
 
-# --- Catch-all to serve React App ---
+# --- Static File Serving ---
 
-@app.get("/")
-async def serve_index():
-    index_file = "frontend/dist/index.html"
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return HTMLResponse(content="Frontend build not found. Please run 'npm run build'", status_code=404)
+if os.path.exists("frontend/dist"):
+    app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
 
 @app.get("/{path:path}")
 async def serve_react(path: str):
-    # 1. Check in dist (built assets)
-    dist_path = os.path.join("frontend/dist", path)
-    if os.path.isfile(dist_path):
-        return FileResponse(dist_path)
-
-    # 2. Check in public (fallback)
-    public_path = os.path.join("frontend/public", path)
-    if os.path.isfile(public_path):
-        return FileResponse(public_path)
-        
-    # 3. SPA Fallback
+    # Check if the requested path is a file in 'dist' or 'public'
+    for base in ["frontend/dist", "frontend/public"]:
+        full_path = os.path.join(base, path)
+        if os.path.isfile(full_path):
+            return FileResponse(full_path)
+            
+    # Fallback to React index.html for SPA routing
     index_file = "frontend/dist/index.html"
     if os.path.exists(index_file):
         return FileResponse(index_file)
     
-    return JSONResponse(content={"error": "Not Found"}, status_code=404)
+    return HTMLResponse(content="Backend running. Frontend not found.", status_code=404)
