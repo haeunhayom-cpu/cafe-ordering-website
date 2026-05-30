@@ -53,7 +53,7 @@ function App() {
   // --- API FETCHERS ---
   const loadMenu = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/menu');
+      const res = await fetch('/api/menu');
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       setMenu(data);
@@ -81,7 +81,7 @@ function App() {
     let interval: any;
     if (activeOrderId && activeOrderStatus !== 'ready' && activeOrderStatus !== 'picked_up') {
       interval = setInterval(() => {
-        fetch(`http://localhost:8000/api/order/${activeOrderId}`)
+        fetch(`/api/order/${activeOrderId}`)
           .then(res => res.json())
           .then(data => {
             if (data.status !== activeOrderStatus) {
@@ -98,7 +98,7 @@ function App() {
     let interval: any;
     if (viewMode === 'admin' && user?.is_admin && adminSelectedCafe) {
       const fetchOrders = () => {
-        fetch('http://localhost:8000/admin/api/orders')
+        fetch('/admin/api/orders')
           .then(res => res.json())
           .then(data => setAllOrders(Array.isArray(data) ? data : []))
           .catch(err => console.error('Admin orders fetch error:', err));
@@ -194,7 +194,7 @@ function App() {
         for (let i = 0; i < item.quantity; i++) itemIds.push(item.id);
       });
       const cafeName = cartCafeName || 'Forum Café';
-      const response = await fetch('http://localhost:8000/api/order', {
+      const response = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item_ids: itemIds, cafe_name: cafeName })
@@ -218,7 +218,7 @@ function App() {
 
   const markReady = async (orderId: number) => {
     try {
-        const response = await fetch(`http://localhost:8000/admin/api/order/${orderId}/ready`, { method: 'POST' });
+        const response = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
         if (response.ok) {
             setAllOrders(prev => prev.filter(o => o.id !== orderId));
         }
