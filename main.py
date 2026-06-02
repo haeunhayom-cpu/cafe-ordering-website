@@ -29,7 +29,7 @@ def seed_data():
             {"name": "Hot Americano", "price": 10.0, "ingredients": "Espresso, Water", "stock_count": 100},     
             {"name": "Iced Latte", "price": 15.0, "ingredients": "Espresso, Milk, Ice", "stock_count": 50},     
             {"name": "Cappuccino", "price": 14.0, "ingredients": "Espresso, Milk", "stock_count": 80},
-            {"name": "Butter Croissant", "price": 12.0, "ingredients": "Flour, Butter", "stock_count": 20},
+            {"name": "Butter Croissant", "price": 12.0, "ingredients": "Flour, Butter", "stock_count": 20},     
             {"name": "Chocolate Muffin", "price": 11.0, "ingredients": "Cocoa, Flour, Egg", "stock_count": 15}, 
             {"name": "Almond Danish", "price": 13.0, "ingredients": "Almonds, Flour, Syrup", "stock_count": 10},
             {"name": "Tuna Sandwich", "price": 22.0, "ingredients": "Tuna, Veggies", "stock_count": 30},        
@@ -60,7 +60,7 @@ async def login(username: str = Form(...), password: str = Form(...)):
     user = User.get_or_none(User.username == username, User.password == password)
     if not user:
         return JSONResponse(content={"error": "Invalid credentials"}, status_code=401)
-    
+
     response = JSONResponse(content={
         "status": "success",
         "user": {
@@ -70,6 +70,17 @@ async def login(username: str = Form(...), password: str = Form(...)):
         }
     })
     # Use a single session cookie for simplicity
+    response.set_cookie(key="session_user", value=username, httponly=True)
+    return response
+
+@app.post("/api/register")
+async def register(username: str = Form(...), password: str = Form(...)):
+    if User.select().where(User.username == username).exists():
+        return JSONResponse(content={"error": "Username already exists"}, status_code=400)
+    
+    User.create(username=username, password=password, is_admin=False)
+    
+    response = JSONResponse(content={"status": "success"})
     response.set_cookie(key="session_user", value=username, httponly=True)
     return response
 
@@ -102,7 +113,7 @@ async def get_menu():
 async def place_order(request: Request, order_data: dict):
     user = get_current_user(request)
     if not user:
-        # Fallback for now if frontend doesn't send cookie correctly, 
+        # Fallback for now if frontend doesn't send cookie correctly,
         # but in production we'd want strict auth
         user = User.get_or_none(User.username == 'student')
 
@@ -136,7 +147,7 @@ async def get_all_orders(request: Request):
     # Apply filtering based on assigned cafe
     if user.assigned_cafe:
         query = query.where(Order.cafe_name == user.assigned_cafe)
-    
+
     orders = query.order_by(Order.created_at.desc())
     result = []
     for o in orders:

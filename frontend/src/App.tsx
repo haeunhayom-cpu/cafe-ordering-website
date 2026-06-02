@@ -27,6 +27,7 @@ function App() {
   // --- STATE ---
   const [user, setUser] = useState<User | null>(null);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -154,6 +155,30 @@ function App() {
     }
   };
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    
+    const formData = new FormData();
+    formData.append('username', loginForm.username);
+    formData.append('password', loginForm.password);
+
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Registration failed');
+      }
+      await checkAuth();
+      setIsRegistering(false);
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
+  };
+
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
     setUser(null);
@@ -165,6 +190,7 @@ function App() {
     setAdminSelectedCafe(null);
     setCartCafeName(null);
     setSelectedFileName('No file chosen');
+    setIsRegistering(false);
   };
 
   const handleUpdateMenu = async (e: React.FormEvent) => {
@@ -265,16 +291,23 @@ function App() {
             <div className="cafe-icon-wrapper">☕</div>
             <div className="branding-line"></div>
           </div>
-          <h1>{viewMode === 'admin' ? 'Staff Portal' : 'Student Access'}</h1>
-          <form onSubmit={handleLogin}>
+          <h1>{isRegistering ? 'Create Account' : (viewMode === 'admin' ? 'Staff Portal' : 'Student Access')}</h1>
+          <form onSubmit={isRegistering ? handleRegister : handleLogin}>
             <input type="text" placeholder="Username" required value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value.toLowerCase()})} />
             <input type="password" placeholder="Password" required value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
             {authError && <p className="error-text">{authError}</p>}
-            <button type="submit" className="pay-btn">{viewMode === 'admin' ? 'Access Dashboard' : 'Enter CAFENOW'}</button>
+            <button type="submit" className="pay-btn">{isRegistering ? 'Sign Up' : (viewMode === 'admin' ? 'Access Dashboard' : 'Enter CAFENOW')}</button>
           </form>
-          <button className="text-link" onClick={() => { setViewMode(viewMode === 'student' ? 'admin' : 'student'); setAuthError(null); }}>
-            Switch to {viewMode === 'student' ? 'Staff' : 'Student'} Login
-          </button>
+          {!isRegistering && (
+            <button className="text-link" onClick={() => { setViewMode(viewMode === 'student' ? 'admin' : 'student'); setAuthError(null); }}>
+              Switch to {viewMode === 'student' ? 'Staff' : 'Student'} Login
+            </button>
+          )}
+          {viewMode === 'student' && (
+            <button className="text-link" onClick={() => { setIsRegistering(!isRegistering); setAuthError(null); }}>
+              {isRegistering ? 'Back to Login' : 'New student? Register here'}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -310,8 +343,8 @@ function App() {
                 <p style={{color: 'var(--primary)', fontWeight: 600, margin: '5px 0 0'}}>Dashboard Manager: {user.username}</p>
             </div>
             <div style={{display: 'flex', gap: '1rem'}}>
-                <button className="admin-nav-btn" onClick={() => setAdminSelectedCafe(null)}>Switch Cafe</button>
-                <button className="admin-nav-btn" onClick={() => setViewMode('student')}>Exit to Student View</button>
+                {!user.assigned_cafe && <button className="admin-nav-btn" onClick={() => setAdminSelectedCafe(null)}>Switch Cafe</button>}
+                {!user.assigned_cafe && <button className="admin-nav-btn" onClick={() => setViewMode('student')}>Exit to Student View</button>}
                 <button className="admin-nav-btn" style={{borderColor: '#ccc', color: '#888'}} onClick={handleLogout}>Logout</button>
             </div>
           </div>
