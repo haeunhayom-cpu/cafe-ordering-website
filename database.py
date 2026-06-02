@@ -26,6 +26,7 @@ class MenuItem(BaseModel):
 class Order(BaseModel):
     customer = ForeignKeyField(User, backref='orders')
     cafe_name = CharField(null=True) # Tracks which cafe the order was placed at
+    queue_number = IntegerField(default=1) # Cafe-specific queue number
     status = CharField(default='pending') # pending, ready, picked_up
     created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
 
