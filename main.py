@@ -120,9 +120,9 @@ async def place_order(request: Request, order_data: dict):
     cafe_name = order_data.get("cafe_name")
 
     with db.atomic():
-        # Continuous Cafe-Specific Queue Logic
-        max_q = Order.select(fn.MAX(Order.queue_number)).where(Order.cafe_name == cafe_name).scalar() or 0
-        next_q = max_q + 1
+        # Resetting Cafe-Specific Queue Logic
+        active_count = Order.select().where(Order.cafe_name == cafe_name, Order.status == 'pending').count()
+        next_q = active_count + 1
 
         new_order = Order.create(customer=user, cafe_name=cafe_name, queue_number=next_q)
         for item_id in item_ids:
