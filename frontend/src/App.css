@@ -630,7 +630,16 @@ body {
   letter-spacing: 2px;
 }
 
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
 .auth-card input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 1.4rem 1.8rem;
   border: 1.8px solid var(--warm-accent);
   border-radius: 10px;
