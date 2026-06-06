@@ -10,6 +10,7 @@ interface CartItem extends MenuItem {
 
 interface OrderRecord {
   id: number;
+  queue_number: number;
   customer: string;
   status: string;
   items: string[];
@@ -37,6 +38,7 @@ function App() {
   const [isPaying, setIsPaying] = useState(false);
   
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
+  const [activeOrderQueueNumber, setActiveOrderQueueNumber] = useState<number | null>(null);
   const [activeOrderStatus, setActiveOrderStatus] = useState<string | null>(null);
   const [activeOrderCafe, setActiveOrderCafe] = useState<string | null>(null);
 
@@ -236,11 +238,9 @@ function App() {
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handlePayment = async () => {
-    if (isPaying || !paymentMethod) return;
+    if (isPaying) return;
     setIsPaying(true);
-    setCheckoutStep('payment');
     try {
-      await new Promise(r => setTimeout(r, 2000));
       const itemIds: number[] = [];
       cart.forEach(item => {
         for (let i = 0; i < item.quantity; i++) itemIds.push(item.id);
@@ -254,6 +254,7 @@ function App() {
       if (!response.ok) throw new Error("Order failed");
       const data = await response.json();
       setActiveOrderId(data.order_id);
+      setActiveOrderQueueNumber(data.queue_number);
       setActiveOrderStatus('pending');
       setActiveOrderCafe(cafeName);
       setCheckoutStep('success');
@@ -389,7 +390,7 @@ function App() {
                 ) : (
                     pendingOrders.map(order => (
                         <div key={order.id} className="order-card-admin" style={{borderLeftColor: '#000'}}>
-                            <span className="badge" style={{background: '#000', color: '#fff'}}>ORDER #{order.id}</span>
+                            <span className="badge" style={{background: '#000', color: '#fff'}}>QUEUE #{order.queue_number}</span>
                             <h3 style={{fontSize: '1.8rem', margin: '1rem 0', color: '#000'}}>{order.customer}</h3>
                             <ul className="order-items-list">{order.items.map((it, idx) => <li key={idx} style={{fontSize: '1.1rem', color: '#000'}}>• {it}</li>)}</ul>
                             <button className="pay-btn" style={{marginTop: '1.5rem', background: '#000'}} onClick={() => markReady(order.id)}>Mark as Ready</button>
@@ -466,7 +467,7 @@ function App() {
           ) : (
             <>
               <div className="tracking-info">
-                  <span className="badge" style={{background: '#000', color: '#fff'}}>Active Order #{activeOrderId}</span>
+                  <span className="badge" style={{background: '#000', color: '#fff'}}>Queue #{activeOrderQueueNumber} (Order #{activeOrderId})</span>
                   <h2>{activeOrderCafe} is preparing</h2>
                   <p style={{color: 'var(--text-light)', marginTop: '0.5rem'}}>You can keep browsing while we craft your order.</p>
               </div>
@@ -542,18 +543,14 @@ function App() {
                     {cart.map(item => <div key={item.id} style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem'}}><span>{item.name} x {item.quantity}</span><strong>₪{(item.price * item.quantity).toFixed(0)}</strong></div>)}
                     <div style={{borderTop: '1px solid var(--warm-accent)', marginTop: '1rem', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between'}}><strong>Total</strong><strong style={{color: 'var(--primary)', fontSize: '1.4rem'}}>₪{totalPrice.toFixed(2)}</strong></div>
                 </div>
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem'}}>
-                  <button className={`filter-btn ${paymentMethod === 'card' ? 'active' : ''}`} style={{borderRadius: '12px', padding: '1.2rem'}} onClick={() => setPaymentMethod('card')}>💳 Stripe / Card</button>
-                  <button className={`filter-btn ${paymentMethod === 'student-id' ? 'active' : ''}`} style={{borderRadius: '12px', padding: '1.2rem'}} onClick={() => setPaymentMethod('student-id')}>🎓 PayPal / ID</button>
-                </div>
-                <button className="pay-btn" onClick={handlePayment} disabled={!paymentMethod}>Pay & Place Order</button>
+                <button className="pay-btn" onClick={handlePayment}>Place Order Now →</button>
               </>
             )}
             {checkoutStep === 'payment' && (
-              <div style={{textAlign: 'center', padding: '3rem 0'}}><div style={{fontSize: '4rem', marginBottom: '2rem'}}>🔒</div><h2>Secure Payment</h2><p>Redirecting to {paymentMethod === 'card' ? 'Stripe' : 'PayPal'}...</p><div className="spinner"></div></div>
+              <div style={{textAlign: 'center', padding: '3rem 0'}}><div style={{fontSize: '4rem', marginBottom: '2rem'}}>🔒</div><h2>Processing Order</h2><p>Please wait a moment...</p><div className="spinner"></div></div>
             )}
             {checkoutStep === 'success' && (
-              <div style={{textAlign: 'center', padding: '2rem 0'}}><div style={{fontSize: '5rem', marginBottom: '1.5rem'}}>🎉</div><h2>Payment Successful!</h2><div style={{background: 'var(--warm-accent)', padding: '1.5rem', borderRadius: '20px', margin: '2rem 0'}}><p>ORDER NUMBER</p><div style={{fontSize: '2.5rem', fontWeight: '900', color: 'var(--primary)'}}>#{activeOrderId}</div></div><button className="pay-btn" onClick={() => { setIsCheckoutOpen(false); setCheckoutStep('cart'); }}>Back to Menu</button></div>
+              <div style={{textAlign: 'center', padding: '2rem 0'}}><div style={{fontSize: '5rem', marginBottom: '1.5rem'}}>🎉</div><h2>Order Placed!</h2><div style={{background: 'var(--warm-accent)', padding: '1.5rem', borderRadius: '20px', margin: '2rem 0'}}><p>QUEUE NUMBER</p><div style={{fontSize: '2.5rem', fontWeight: '900', color: 'var(--primary)'}}>#{activeOrderQueueNumber}</div><p style={{marginTop: '0.5rem', fontSize: '0.8rem', opacity: 0.7}}>Order #{activeOrderId}</p></div><button className="pay-btn" onClick={() => { setIsCheckoutOpen(false); setCheckoutStep('cart'); }}>Back to Menu</button></div>
             )}
           </div>
         </div>

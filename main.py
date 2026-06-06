@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from database import db, User, MenuItem, Order, OrderItem, init_db
+from peewee import fn
 import os
 import shutil
 import uuid
@@ -77,9 +78,9 @@ async def login(username: str = Form(...), password: str = Form(...)):
 async def register(username: str = Form(...), password: str = Form(...)):
     if User.select().where(User.username == username).exists():
         return JSONResponse(content={"error": "Username already exists"}, status_code=400)
-    
+
     User.create(username=username, password=password, is_admin=False)
-    
+
     response = JSONResponse(content={"status": "success"})
     response.set_cookie(key="session_user", value=username, httponly=True)
     return response
@@ -113,29 +114,31 @@ async def get_menu():
 async def place_order(request: Request, order_data: dict):
     user = get_current_user(request)
     if not user:
-        # Fallback for now if frontend doesn't send cookie correctly,
-        # but in production we'd want strict auth
         user = User.get_or_none(User.username == 'student')
 
     item_ids = order_data.get("item_ids", [])
     cafe_name = order_data.get("cafe_name")
 
     with db.atomic():
-        new_order = Order.create(customer=user, cafe_name=cafe_name)
+        # Resetting Cafe-Specific Queue Logic
+        active_count = Order.select().where(Order.cafe_name == cafe_name, Order.status == 'pending').count()
+        next_q = active_count + 1
+
+        new_order = Order.create(customer=user, cafe_name=cafe_name, queue_number=next_q)
         for item_id in item_ids:
             item = MenuItem.get_by_id(item_id)
             item.stock_count -= 1
             item.save()
             OrderItem.create(order=new_order, menu_item=item)
 
-    return {"order_id": new_order.id, "status": new_order.status}
+    return {"order_id": new_order.id, "queue_number": new_order.queue_number, "status": new_order.status}
 
 @app.get("/api/order/{order_id}")
 async def get_order_status(order_id: int):
     order = Order.get_or_none(Order.id == order_id)
     if not order:
         raise HTTPException(status_code=404)
-    return {"id": order.id, "status": order.status}
+    return {"id": order.id, "queue_number": order.queue_number, "status": order.status}
 
 @app.get("/admin/api/orders")
 async def get_all_orders(request: Request):
@@ -154,6 +157,7 @@ async def get_all_orders(request: Request):
         items = [i.menu_item.name for i in o.items]
         result.append({
             "id": o.id,
+            "queue_number": o.queue_number,
             "customer": o.customer.username,
             "cafe_name": o.cafe_name,
             "status": o.status,
