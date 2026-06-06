@@ -1,4 +1,4 @@
-﻿from peewee import *
+from peewee import *
 import os
 
 # Database path
@@ -35,9 +35,13 @@ class OrderItem(BaseModel):
     menu_item = ForeignKeyField(MenuItem)
     quantity = IntegerField(default=1)
 
+class UserFavorite(BaseModel):
+    user = ForeignKeyField(User, backref='favorites')
+    menu_item = ForeignKeyField(MenuItem)
+
 def init_db():
     db.connect()
-    db.create_tables([User, MenuItem, Order, OrderItem])
+    db.create_tables([User, MenuItem, Order, OrderItem, UserFavorite])
 
     # Default students
     students = [
