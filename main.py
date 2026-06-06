@@ -140,6 +140,55 @@ async def get_order_status(order_id: int):
         raise HTTPException(status_code=404)
     return {"id": order.id, "queue_number": order.queue_number, "status": order.status}
 
+# --- User Profile & History API ---
+
+@app.get("/api/user/orders")
+async def get_user_orders(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401)
+    
+    orders = Order.select().where(Order.customer == user).order_by(Order.created_at.desc())
+    result = []
+    for o in orders:
+        items = [{"id": i.menu_item.id, "name": i.menu_item.name, "price": i.menu_item.price} for i in o.items]
+        result.append({
+            "id": o.id,
+            "cafe_name": o.cafe_name,
+            "status": o.status,
+            "items": items,
+            "created_at": o.created_at.isoformat(),
+            "queue_number": o.queue_number
+        })
+    return result
+
+@app.get("/api/user/favorites")
+async def get_user_favorites(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return []
+    from database import UserFavorite
+    favorites = UserFavorite.select().where(UserFavorite.user == user)
+    return [f.menu_item.id for f in favorites]
+
+@app.post("/api/user/favorites/toggle")
+async def toggle_favorite(request: Request, item_data: dict):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401)
+    
+    from database import UserFavorite, MenuItem
+    item_id = item_data.get("item_id")
+    item = MenuItem.get_by_id(item_id)
+    
+    fav = UserFavorite.get_or_none(UserFavorite.user == user, UserFavorite.menu_item == item)
+    if fav:
+        fav.delete_instance()
+        return {"status": "removed"}
+    else:
+        UserFavorite.create(user=user, menu_item=item)
+        return {"status": "added"}
+
 @app.get("/admin/api/orders")
 async def get_all_orders(request: Request):
     user = get_current_user(request)
