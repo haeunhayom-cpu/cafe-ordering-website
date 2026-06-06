@@ -49,6 +49,7 @@ function App() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [adminSelectedCafe, setAdminSelectedCafe] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string>('No file chosen');
+  const [showPassword, setShowPassword] = useState(false);
 
   // --- API FETCHERS ---
   const loadMenu = async () => {
@@ -243,7 +244,36 @@ function App() {
           <h1>{viewMode === 'admin' ? 'Staff Portal' : 'Student Access'}</h1>
           <form onSubmit={handleLogin}>
             <input type="text" placeholder="Username" required value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value.toLowerCase()})} />
-            <input type="password" placeholder="Password" required value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
+            <div style={{ position: 'relative' }}>
+              <input 
+                type={showPassword ? "text" : "password"} 
+                placeholder="Password" 
+                required 
+                value={loginForm.password} 
+                onChange={e => setLoginForm({...loginForm, password: e.target.value})} 
+                style={{ paddingRight: '4rem' }}
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '1rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '1.4rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: '#999',
+                  padding: '0.5rem'
+                }}
+              >
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
             {authError && <p className="error-text">{authError}</p>}
             <button type="submit" className="pay-btn">{viewMode === 'admin' ? 'Access Dashboard' : 'Enter CAFENOW'}</button>
           </form>
