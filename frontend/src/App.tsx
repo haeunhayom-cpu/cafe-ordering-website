@@ -447,7 +447,8 @@ function App() {
             <div className="cafe-icon-wrapper">☕</div>
             <div className="branding-line"></div>
           </div>
-          <h1>{isRegistering ? 'Create Account' : (viewMode === 'admin' ? 'Staff Portal' : 'Student Access')}</h1>
+          <h1 style={{ color: '#000', fontSize: '2rem', marginBottom: '0.5rem', fontWeight: 900 }}>Hebrew University</h1>
+          <h2 style={{ color: 'var(--primary)', fontSize: '1.2rem', marginBottom: '2rem', fontWeight: 700 }}>Cafeteria Ordering & Management</h2>
           <form onSubmit={isRegistering ? handleRegister : handleLogin}>
             <input type="text" placeholder="Username" required value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value.toLowerCase()})} />
             <div style={{ position: 'relative' }}>
@@ -614,7 +615,10 @@ function App() {
                   <button className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>Home</button>
                   <button className={activeTab === 'profile' ? 'active' : ''} onClick={() => setActiveTab('profile')}>My Profile</button>
                 </nav>
-                <button className="logout-btn-header" onClick={handleLogout}>Logout</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                  <span style={{ color: '#000', fontWeight: 800, fontSize: '1.1rem' }}>Hi, {user?.username}</span>
+                  <button className="logout-btn-header" onClick={handleLogout}>Logout</button>
+                </div>
             </div>
             <div className="title-container"><div className="main-title">CAFENOW</div><div className="sub-title">HUJI</div><p className="hero-description">Order Faster. Skip the Line. Enjoy Your Coffee.</p></div>
         </div>
