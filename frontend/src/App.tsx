@@ -101,12 +101,44 @@ function App() {
     }
   };
 
+  const loadAllOrders = async () => {
+    try {
+      const res = await fetch('/admin/api/orders');
+      if (res.ok) setAllOrders(await res.json());
+    } catch (err) {
+      console.error("Admin orders fetch error:", err);
+    }
+  };
+
   useEffect(() => {
     loadMenu();
     checkAuth();
   }, []);
 
-  // ... (interval effects remain same)
+  useEffect(() => {
+    let interval: any;
+    if (user?.is_admin && viewMode === 'admin') {
+      loadAllOrders();
+      interval = setInterval(loadAllOrders, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [user, viewMode]);
+
+  useEffect(() => {
+    let interval: any;
+    if (activeOrderId && activeOrderStatus !== 'ready') {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/order/${activeOrderId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setActiveOrderStatus(data.status);
+          }
+        } catch (e) {}
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [activeOrderId, activeOrderStatus]);
 
   // --- HANDLERS ---
   const handleLogin = async (e: React.FormEvent) => {
@@ -200,7 +232,93 @@ function App() {
     setActiveTab('home');
   };
 
-  // ... (cart handlers remain same)
+  const addToCart = (item: MenuItem, cafe: Cafe) => {
+    if (cartCafeName && cartCafeName !== cafe.name) {
+      if (!confirm(`Clear cart from ${cartCafeName} to order from ${cafe.name}?`)) return;
+      setCart([]);
+    }
+    setCartCafeName(cafe.name);
+    const existing = cart.find(c => c.id === item.id);
+    if (existing) {
+      setCart(cart.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+    } else {
+      setCart([...cart, { ...item, quantity: 1 }]);
+    }
+    setLastAddedItem(item.name);
+    setTimeout(() => setLastAddedItem(null), 2000);
+  };
+
+  const removeFromCart = (id: number) => {
+    const newCart = cart.filter(c => c.id !== id);
+    setCart(newCart);
+    if (newCart.length === 0) setCartCafeName(null);
+  };
+
+  const updateQuantity = (id: number, delta: number) => {
+    const newCart = cart.map(c => {
+      if (c.id === id) {
+        const newQty = Math.max(0, c.quantity + delta);
+        return { ...c, quantity: newQty };
+      }
+      return c;
+    }).filter(c => c.quantity > 0);
+    setCart(newCart);
+    if (newCart.length === 0) setCartCafeName(null);
+  };
+
+  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    try {
+      const formData = new FormData();
+      formData.append('username', loginForm.username);
+      formData.append('password', loginForm.password);
+
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Registration failed');
+      }
+      await handleLogin(e);
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
+  };
+
+  const markReady = async (orderId: number) => {
+    try {
+      const res = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
+      if (res.ok) {
+        setAllOrders(allOrders.map(o => o.id === orderId ? { ...o, status: 'ready' } : o));
+      }
+    } catch (err) {
+      console.error("Failed to mark order as ready:", err);
+    }
+  };
+
+  const handleUpdateMenu = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    const formData = new FormData(e.currentTarget);
+    try {
+      const res = await fetch(`/api/admin/menu/${editingItem.id}`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        loadMenu();
+        setEditingItem(null);
+      }
+    } catch (err) {
+      console.error("Failed to update menu:", err);
+    }
+  };
 
   const handlePayment = async () => {
     if (isPaying) return;
@@ -235,7 +353,10 @@ function App() {
     }
   };
 
-  // ... (filteredCafes remains same)
+  const locations = useMemo(() => ['All', ...new Set(CAFE_DATA.map(c => c.location))], []);
+  const filteredCafes = useMemo(() => {
+    return filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location === filter);
+  }, [filter]);
 
   // --- SUB-COMPONENTS ---
 
