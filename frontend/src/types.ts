@@ -6,6 +6,7 @@ export type MenuItem = {
   stock_count: number;
   image_url: string | null;
   is_available: boolean;
+  cafe_name: string | null;
 };
 
 export type Cafe = {

@@ -51,6 +51,7 @@ function App() {
   const [viewMode, setViewMode] = useState<'student' | 'admin'>('student');
   const [allOrders, setAllOrders] = useState<OrderRecord[]>([]);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [isAddingItem, setIsAddingItem] = useState(false);
   const [adminSelectedCafe, setAdminSelectedCafe] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string>('No file chosen');
   const [showPassword, setShowPassword] = useState(false);
@@ -304,19 +305,35 @@ function App() {
 
   const handleUpdateMenu = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!editingItem) return;
     const formData = new FormData(e.currentTarget);
+    const url = isAddingItem ? '/admin/api/menu' : `/admin/api/menu/${editingItem?.id}`;
     try {
-      const res = await fetch(`/api/admin/menu/${editingItem.id}`, {
+      const res = await fetch(url, {
         method: 'POST',
         body: formData
       });
       if (res.ok) {
         loadMenu();
         setEditingItem(null);
+        setIsAddingItem(false);
+        setSelectedFileName('No file chosen');
       }
     } catch (err) {
-      console.error("Failed to update menu:", err);
+      console.error("Failed to update/add menu item:", err);
+    }
+  };
+
+  const handleDeleteItem = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+    try {
+      const res = await fetch(`/admin/api/menu/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadMenu();
+        setEditingItem(null);
+        setIsAddingItem(false);
+      }
+    } catch (err) {
+      console.error("Failed to delete menu item:", err);
     }
   };
 
@@ -536,40 +553,44 @@ function App() {
                 )}
             </div>
             <div className="menu-manager">
-                <h2 style={{fontSize: '1.8rem', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem', color: '#000'}}>Inventory</h2>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem'}}>
+                    <h2 style={{fontSize: '1.8rem', margin: 0, color: '#000'}}>Inventory</h2>
+                    <button className="admin-nav-btn" style={{background: '#000', color: '#fff'}} onClick={() => { setIsAddingItem(true); setEditingItem(null); setSelectedFileName('No file chosen'); }}>+ Add Item</button>
+                </div>
                 <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
-                    {menu.length > 0 ? menu.map(item => (
-                        <div key={item.id} className="menu-item-btn" style={{background: '#fff', textAlign: 'left', border: '1px solid #eee', padding: '1.5rem'}} onClick={() => { setEditingItem(item); setSelectedFileName('No file chosen'); }}>
+                    {menu.filter(m => m.cafe_name === adminSelectedCafe).length > 0 ? menu.filter(m => m.cafe_name === adminSelectedCafe).map(item => (
+                        <div key={item.id} className="menu-item-btn" style={{background: '#fff', textAlign: 'left', border: '1px solid #eee', padding: '1.5rem'}} onClick={() => { setEditingItem(item); setIsAddingItem(false); setSelectedFileName('No file chosen'); }}>
                             <div style={{display: 'flex', flexDirection: 'column'}}>
                                 <span style={{fontSize: '1.1rem', fontWeight: 800, color: '#000'}}>{item.name}</span>
                                 <span style={{fontSize: '0.8rem', color: '#888', fontWeight: 400}}>{item.ingredients}</span>
                             </div>
                             <strong style={{fontSize: '1.2rem', color: '#000'}}>₪{item.price}</strong>
                         </div>
-                    )) : <p>Loading menu...</p>}
+                    )) : <p style={{color: '#666', textAlign: 'center', padding: '2rem'}}>No items in your menu yet.</p>}
                 </div>
             </div>
           </div>
-          {editingItem && (
-              <div className="modal-overlay" onClick={() => setEditingItem(null)}>
+          {(editingItem || isAddingItem) && (
+              <div className="modal-overlay" onClick={() => { setEditingItem(null); setIsAddingItem(false); }}>
                   <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: '500px', borderRadius: '24px', padding: '3rem'}}>
-                      <h2 style={{fontSize: '2.2rem', fontWeight: 900, marginBottom: '2rem', color: '#000'}}>Edit Item</h2>
+                      <h2 style={{fontSize: '2.2rem', fontWeight: 900, marginBottom: '2rem', color: '#000'}}>{isAddingItem ? 'Add New Item' : 'Edit Item'}</h2>
                       <form onSubmit={handleUpdateMenu} style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
                           <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Item Name</label>
-                          <input type="text" name="name" defaultValue={editingItem.name} style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
+                          <input type="text" name="name" defaultValue={editingItem?.name || ''} required style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
                           <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Price (₪)</label>
-                          <input type="number" name="price" defaultValue={editingItem.price} step="0.1" style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 700, color: '#000', background: '#fafafa'}} />
+                          <input type="number" name="price" defaultValue={editingItem?.price || ''} step="0.1" required style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 700, color: '#000', background: '#fafafa'}} />
                           <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Ingredients</label>
-                          <textarea name="ingredients" defaultValue={editingItem.ingredients} style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', minHeight: '100px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
-                          <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Update Image</label>
+                          <textarea name="ingredients" defaultValue={editingItem?.ingredients || ''} required style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', minHeight: '100px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
+                          <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>{isAddingItem ? 'Item Image' : 'Update Image'}</label>
                           <div className="custom-file-input">
                               <label htmlFor="file-upload" className="file-label">Choose File</label>
                               <span className="file-name">{selectedFileName}</span>
                               <input id="file-upload" type="file" name="image" onChange={(e) => setSelectedFileName(e.target.files?.[0]?.name || 'No file chosen')} style={{display: 'none'}} />
                           </div>
-                          <div style={{display: 'flex', gap: '1rem', marginTop: '1rem'}}>
-                              <button type="submit" className="save-btn" style={{flex: 1}}>Save Changes</button>
-                              <button type="button" className="admin-nav-btn" style={{flex: 1, borderRadius: '8px', border: '1.5px solid #eee'}} onClick={() => setEditingItem(null)}>Cancel</button>
+                          <div style={{display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem'}}>
+                              <button type="submit" className="save-btn" style={{flex: 1, minWidth: '150px'}}>{isAddingItem ? 'Add Item' : 'Save Changes'}</button>
+                              {!isAddingItem && editingItem && <button type="button" className="admin-nav-btn" style={{flex: 1, minWidth: '150px', borderColor: 'var(--high)', color: 'var(--high)'}} onClick={() => handleDeleteItem(editingItem.id)}>Delete Item</button>}
+                              <button type="button" className="admin-nav-btn" style={{flex: 1, minWidth: '150px', borderRadius: '8px', border: '1.5px solid #eee'}} onClick={() => { setEditingItem(null); setIsAddingItem(false); }}>Cancel</button>
                           </div>
                       </form>
                   </div>
@@ -653,7 +674,7 @@ function App() {
               <button className="filter-btn" onClick={() => setSelectedCafe(null)}>Close</button>
             </div>
             <div className="menu-grid-detailed">
-              {menu.length > 0 ? menu.map(item => (
+              {menu.filter(m => m.cafe_name === selectedCafe.name).length > 0 ? menu.filter(m => m.cafe_name === selectedCafe.name).map(item => (
                 <div key={item.id} style={{position: 'relative'}}>
                   <button className="menu-item-btn" onClick={() => addToCart(item, selectedCafe)}>
                     <div style={{textAlign: 'left'}}><div style={{fontWeight: '800'}}>{item.name}</div><div style={{fontSize: '0.75rem', fontWeight: 'normal', marginTop: '0.3rem', color: 'var(--text-light)'}}>{item.ingredients}</div></div>
@@ -666,7 +687,7 @@ function App() {
                     {favorites.includes(item.id) ? '❤️' : '🤍'}
                   </button>
                 </div>
-              )) : <p>Loading menu items...</p>}
+              )) : <p>No items available for this café.</p>}
             </div>
           </div>
         </div>
