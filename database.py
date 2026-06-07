@@ -22,6 +22,7 @@ class MenuItem(BaseModel):
     stock_count = IntegerField(default=0)
     image_url = CharField(null=True)
     is_available = BooleanField(default=True)
+    cafe_name = CharField(null=True) # Which cafe this item belongs to
 
 class Order(BaseModel):
     customer = ForeignKeyField(User, backref='orders')

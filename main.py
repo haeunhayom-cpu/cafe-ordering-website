@@ -21,12 +21,14 @@ app.add_middleware(
 
 # Ensure directories exist
 os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Function to seed the database
 def seed_data():
     if MenuItem.select().count() == 0:
         print("Seeding database...")
-        items = [
+        cafes = ['Forum Café', 'Social Sciences Vitamin', 'Humanities Vitamin', 'Rothberg Forum Café']
+        default_items = [
             {"name": "Hot Americano", "price": 10.0, "ingredients": "Espresso, Water", "stock_count": 100},     
             {"name": "Iced Latte", "price": 15.0, "ingredients": "Espresso, Milk, Ice", "stock_count": 50},     
             {"name": "Cappuccino", "price": 14.0, "ingredients": "Espresso, Milk", "stock_count": 80},
@@ -37,8 +39,12 @@ def seed_data():
             {"name": "Omelet Bagel", "price": 20.0, "ingredients": "Egg, Cheese", "stock_count": 25},
             {"name": "Healthy Salad", "price": 25.0, "ingredients": "Greens, Nuts", "stock_count": 40}
         ]
-        for item in items:
-            MenuItem.create(**item)
+        # Distribute items across all cafes
+        for cafe in cafes:
+            for item in default_items:
+                item_copy = item.copy()
+                item_copy['cafe_name'] = cafe
+                MenuItem.create(**item_copy)
         print("Seeding complete.")
 
 @app.on_event("startup")
@@ -47,6 +53,7 @@ def startup():
     seed_data()
 
 # --- Auth Helper ---
+# ... (rest of auth remains)
 
 def get_current_user(request: Request):
     username = request.cookies.get("session_user")
@@ -90,6 +97,26 @@ async def get_me(request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse(content={"error": "Not logged in"}, status_code=401)
+    
+    # Auto-populate menu for cafe if empty (ensures every cafe has a base menu)
+    if user.is_admin and user.assigned_cafe:
+        if MenuItem.select().where(MenuItem.cafe_name == user.assigned_cafe).count() == 0:
+            default_items = [
+                {"name": "Hot Americano", "price": 10.0, "ingredients": "Espresso, Water", "stock_count": 100},     
+                {"name": "Iced Latte", "price": 15.0, "ingredients": "Espresso, Milk, Ice", "stock_count": 50},     
+                {"name": "Cappuccino", "price": 14.0, "ingredients": "Espresso, Milk", "stock_count": 80},
+                {"name": "Butter Croissant", "price": 12.0, "ingredients": "Flour, Butter", "stock_count": 20},     
+                {"name": "Chocolate Muffin", "price": 11.0, "ingredients": "Cocoa, Flour, Egg", "stock_count": 15}, 
+                {"name": "Almond Danish", "price": 13.0, "ingredients": "Almonds, Flour, Syrup", "stock_count": 10},
+                {"name": "Tuna Sandwich", "price": 22.0, "ingredients": "Tuna, Veggies", "stock_count": 30},        
+                {"name": "Omelet Bagel", "price": 20.0, "ingredients": "Egg, Cheese", "stock_count": 25},
+                {"name": "Healthy Salad", "price": 25.0, "ingredients": "Greens, Nuts", "stock_count": 40}
+            ]
+            for item in default_items:
+                item_copy = item.copy()
+                item_copy['cafe_name'] = user.assigned_cafe
+                MenuItem.create(**item_copy)
+
     return {
         "username": user.username,
         "is_admin": user.is_admin,
@@ -228,6 +255,67 @@ async def mark_order_ready(order_id: int, request: Request):
 
     order.status = "ready"
     order.save()
+    return {"status": "success"}
+
+@app.post("/admin/api/menu")
+async def add_menu_item(request: Request, name: str = Form(...), price: float = Form(...), ingredients: str = Form(...), image: UploadFile = File(None)):
+    user = get_current_user(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=401)
+    
+    image_url = None
+    if image and image.filename:
+        ext = image.filename.split('.')[-1]
+        filename = f"{uuid.uuid4()}.{ext}"
+        filepath = os.path.join("uploads", filename)
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        image_url = f"/uploads/{filename}"
+
+    MenuItem.create(
+        name=name,
+        price=price,
+        ingredients=ingredients,
+        image_url=image_url,
+        cafe_name=user.assigned_cafe,
+        stock_count=100
+    )
+    return {"status": "success"}
+
+@app.post("/admin/api/menu/{item_id}")
+async def update_menu_item(item_id: int, request: Request, name: str = Form(...), price: float = Form(...), ingredients: str = Form(...), image: UploadFile = File(None)):
+    user = get_current_user(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=401)
+    
+    item = MenuItem.get_by_id(item_id)
+    if user.assigned_cafe and item.cafe_name != user.assigned_cafe:
+        raise HTTPException(status_code=403)
+
+    item.name = name
+    item.price = price
+    item.ingredients = ingredients
+    if image and image.filename:
+        ext = image.filename.split('.')[-1]
+        filename = f"{uuid.uuid4()}.{ext}"
+        filepath = os.path.join("uploads", filename)
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        item.image_url = f"/uploads/{filename}"
+    item.save()
+    return {"status": "success"}
+
+@app.delete("/admin/api/menu/{item_id}")
+async def delete_menu_item(item_id: int, request: Request):
+    user = get_current_user(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=401)
+    
+    item = MenuItem.get_by_id(item_id)
+    if user.assigned_cafe and item.cafe_name != user.assigned_cafe:
+        raise HTTPException(status_code=403)
+
+    item.delete_instance()
     return {"status": "success"}
 
 # --- Static File Serving ---
