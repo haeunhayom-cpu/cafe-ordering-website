@@ -519,7 +519,7 @@ function App() {
         </div>
       );
     }
-    const pendingOrders = allOrders.filter(o => o.status === 'pending' && o.cafe_name === adminSelectedCafe);
+    const activeOrders = allOrders.filter(o => (o.status === 'pending' || o.status === 'ready') && o.cafe_name === adminSelectedCafe);
     return (
       <div className="container" style={{paddingTop: '3rem'}}>
           <div className="admin-header" style={{borderColor: '#000', borderBottom: '2px solid #000'}}>
@@ -536,18 +536,21 @@ function App() {
           <div style={{display: 'grid', gridTemplateColumns: '1fr 400px', gap: '3rem'}}>
             <div className="orders-grid">
                 <h2 style={{fontSize: '1.8rem', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem', color: '#000'}}>Live Orders</h2>
-                {pendingOrders.length === 0 ? (
+                {activeOrders.length === 0 ? (
                     <div className="status-screen" style={{gridColumn: '1/-1', background: 'white', padding: '5rem'}}>
                         <div style={{fontSize: '4rem'}}>☕</div>
-                        <p style={{fontWeight: 600, marginTop: '1rem', color: '#000'}}>No pending orders for {adminSelectedCafe}.</p>
+                        <p style={{fontWeight: 600, marginTop: '1rem', color: '#000'}}>No active orders for {adminSelectedCafe}.</p>
                     </div>
                 ) : (
-                    pendingOrders.map(order => (
-                        <div key={order.id} className="order-card-admin" style={{borderLeftColor: '#000'}}>
-                            <span className="badge" style={{background: '#000', color: '#fff'}}>QUEUE #{order.queue_number}</span>
+                    activeOrders.map(order => (
+                        <div key={order.id} className={`order-card-admin ${order.status}`} style={{borderLeftColor: order.status === 'ready' ? 'var(--primary)' : '#000'}}>
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start'}}>
+                              <span className="badge" style={{background: order.status === 'ready' ? 'var(--primary)' : '#000', color: '#fff'}}>QUEUE #{order.queue_number}</span>
+                              {order.status === 'ready' && <span className="status-pill ready">READY</span>}
+                            </div>
                             <h3 style={{fontSize: '1.8rem', margin: '1rem 0', color: '#000'}}>{order.customer}</h3>
                             <ul className="order-items-list">{order.items.map((it, idx) => <li key={idx} style={{fontSize: '1.1rem', color: '#000'}}>• {it}</li>)}</ul>
-                            <button className="pay-btn" style={{marginTop: '1.5rem', background: '#000'}} onClick={() => markReady(order.id)}>Mark as Ready</button>
+                            {order.status === 'pending' && <button className="pay-btn" style={{marginTop: '1.5rem', background: '#000'}} onClick={() => markReady(order.id)}>Mark as Ready</button>}
                         </div>
                     ))
                 )}
