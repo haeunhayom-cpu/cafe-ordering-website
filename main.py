@@ -222,7 +222,8 @@ async def get_all_orders(request: Request):
     if not user or not user.is_admin:
         raise HTTPException(status_code=401, detail="Admin access required")
 
-    query = Order.select()
+    # Only show 'pending' orders in the 'Live Orders' section
+    query = Order.select().where(Order.status == 'pending')
     # Apply filtering based on assigned cafe
     if user.assigned_cafe:
         query = query.where(Order.cafe_name == user.assigned_cafe)
