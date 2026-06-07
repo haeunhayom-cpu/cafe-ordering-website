@@ -377,64 +377,90 @@ function App() {
 
   // --- SUB-COMPONENTS ---
 
-  const UserProfile = () => (
-    <div className="profile-section fade-in">
-      <div className="profile-header">
-        <div className="profile-avatar">{user?.username[0].toUpperCase()}</div>
-        <div className="profile-info">
-          <h2>{user?.username}</h2>
-          <p>HUJI Student | Campus Explorer</p>
-        </div>
-      </div>
+  const UserProfile = () => {
+    const groupedOrders = useMemo(() => {
+      const groups: { [key: string]: any[] } = {};
+      orderHistory.forEach(order => {
+        if (!groups[order.cafe_name]) groups[order.cafe_name] = [];
+        groups[order.cafe_name].push(order);
+      });
+      return groups;
+    }, [orderHistory]);
 
-      <div className="profile-content-grid">
-        <div className="history-column">
-          <h3 className="section-title">Order History</h3>
-          {orderHistory.length === 0 ? (
-            <div className="empty-state">No past orders yet.</div>
-          ) : (
-            <div className="history-list">
-              {orderHistory.map(order => (
-                <div key={order.id} className="history-card">
-                  <div className="history-card-header">
-                    <div>
-                      <div className="history-cafe">{order.cafe_name}</div>
-                      <div className="history-date">{new Date(order.created_at).toLocaleDateString()}</div>
+    return (
+      <div className="profile-section fade-in">
+        <div className="profile-header">
+          <div className="profile-avatar">{user?.username[0].toUpperCase()}</div>
+          <div className="profile-info">
+            <h2>{user?.username}</h2>
+            <p>HUJI Student | Campus Explorer</p>
+          </div>
+        </div>
+
+        <div className="profile-content-grid">
+          <div className="history-column">
+            <h3 className="section-title">Order History</h3>
+            {orderHistory.length === 0 ? (
+              <div className="empty-state">No past orders yet.</div>
+            ) : (
+              <div className="history-list">
+                {Object.entries(groupedOrders).map(([cafeName, orders]) => (
+                  <div key={cafeName} className="cafe-history-group" style={{ marginBottom: '3rem' }}>
+                    <h4 style={{ 
+                      fontSize: '1.4rem', 
+                      fontWeight: 800, 
+                      color: '#000', 
+                      marginBottom: '1.5rem', 
+                      paddingBottom: '0.5rem',
+                      borderBottom: '2px solid var(--warm-accent)'
+                    }}>
+                      {cafeName}
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {orders.map(order => (
+                        <div key={order.id} className="history-card">
+                          <div className="history-card-header">
+                            <div>
+                              <div className="history-date" style={{ color: '#000', fontWeight: 600 }}>{new Date(order.created_at).toLocaleDateString()}</div>
+                            </div>
+                            <span className={`status-pill ${order.status}`} style={{ color: '#000', fontWeight: 800 }}>{order.status.toUpperCase()}</span>
+                          </div>
+                          <div className="history-items" style={{ color: '#333' }}>
+                            {order.items.map((it: any, idx: number) => (
+                              <span key={idx}>{it.name}{idx < order.items.length - 1 ? ', ' : ''}</span>
+                            ))}
+                          </div>
+                          <button className="reorder-btn" onClick={() => reorder(order)}>Reorder Now</button>
+                        </div>
+                      ))}
                     </div>
-                    <span className={`status-pill ${order.status}`}>{order.status}</span>
                   </div>
-                  <div className="history-items">
-                    {order.items.map((it: any, idx: number) => (
-                      <span key={idx}>{it.name}{idx < order.items.length - 1 ? ', ' : ''}</span>
-                    ))}
-                  </div>
-                  <button className="reorder-btn" onClick={() => reorder(order)}>Reorder Now</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-        <div className="favorites-column">
-          <h3 className="section-title">Favorite Drinks</h3>
-          {favorites.length === 0 ? (
-            <div className="empty-state">Save your go-to drinks here.</div>
-          ) : (
-            <div className="favorites-list">
-              {menu.filter(m => favorites.includes(m.id)).map(item => (
-                <div key={item.id} className="fav-item">
-                  <div style={{fontWeight: 700}}>{item.name}</div>
-                  <div className="fav-actions">
-                    <button className="fav-toggle-btn active" onClick={() => toggleFavorite(item.id)}>❤️</button>
+          <div className="favorites-column">
+            <h3 className="section-title">Favorite Drinks</h3>
+            {favorites.length === 0 ? (
+              <div className="empty-state">Save your go-to drinks here.</div>
+            ) : (
+              <div className="favorites-list">
+                {menu.filter(m => favorites.includes(m.id)).map(item => (
+                  <div key={item.id} className="fav-item">
+                    <div style={{fontWeight: 700, color: '#000'}}>{item.name}</div>
+                    <div className="fav-actions">
+                      <button className="fav-toggle-btn active" onClick={() => toggleFavorite(item.id)}>❤️</button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // --- RENDER LOGIC ---
 
