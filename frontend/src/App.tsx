@@ -50,6 +50,7 @@ function App() {
   const [viewMode, setViewMode] = useState<'student' | 'admin'>('student');
   const [allOrders, setAllOrders] = useState<OrderRecord[]>([]);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [isAddingItem, setIsAddingItem] = useState(false);
   const [adminSelectedCafe, setAdminSelectedCafe] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string>('No file chosen');
   const [showPassword, setShowPassword] = useState(false);
@@ -100,6 +101,15 @@ function App() {
     }
   };
 
+  const loadAllOrders = async () => {
+    try {
+      const res = await fetch('/admin/api/orders');
+      if (res.ok) setAllOrders(await res.json());
+    } catch (err) {
+      console.error("Admin orders fetch error:", err);
+    }
+  };
+
   useEffect(() => {
     loadMenu();
     checkAuth();
@@ -107,41 +117,28 @@ function App() {
 
   useEffect(() => {
     let interval: any;
-    if (activeOrderId && activeOrderStatus !== 'ready' && activeOrderStatus !== 'picked_up') {
-      interval = setInterval(() => {
-        fetch(`/api/order/${activeOrderId}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.status !== activeOrderStatus) {
-              setActiveOrderStatus(data.status);
-            }
-          })
-          .catch(err => console.error('Status poll error:', err));
+    if (user?.is_admin && viewMode === 'admin') {
+      loadAllOrders();
+      interval = setInterval(loadAllOrders, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [user, viewMode]);
+
+  useEffect(() => {
+    let interval: any;
+    if (activeOrderId && activeOrderStatus !== 'ready') {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/order/${activeOrderId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setActiveOrderStatus(data.status);
+          }
+        } catch (e) {}
       }, 3000);
     }
     return () => clearInterval(interval);
   }, [activeOrderId, activeOrderStatus]);
-
-  useEffect(() => {
-    let interval: any;
-    if (viewMode === 'admin' && user?.is_admin && adminSelectedCafe) {
-      const fetchOrders = () => {
-        fetch('/admin/api/orders')
-          .then(res => {
-            if (res.status === 401) {
-              handleLogout();
-              return [];
-            }
-            return res.json();
-          })
-          .then(data => setAllOrders(Array.isArray(data) ? data : []))
-          .catch(err => console.error('Admin orders fetch error:', err));
-      };
-      fetchOrders();
-      interval = setInterval(fetchOrders, 3000);
-    }
-    return () => clearInterval(interval);
-  }, [viewMode, user, adminSelectedCafe]);
 
   // --- HANDLERS ---
   const handleLogin = async (e: React.FormEvent) => {
@@ -257,46 +254,87 @@ function App() {
     setActiveTab('home');
   };
 
-  const handleUpdateMenu = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!editingItem) return;
-      alert('Changes saved to cloud database!');
-      setEditingItem(null);
-      setSelectedFileName('No file chosen');
-      loadMenu();
-  };
-
   const addToCart = (item: MenuItem, cafe: Cafe) => {
-    if (!cartCafeName || cartCafeName !== cafe.name) {
-      setCartCafeName(cafe.name);
+    if (cartCafeName && cartCafeName !== cafe.name) {
+      if (!confirm(`Clear cart from ${cartCafeName} to order from ${cafe.name}?`)) return;
+      setCart([]);
     }
-    setCart(prevCart => {
-      const existing = prevCart.find(i => i.id === item.id);
-      if (existing) {
-        return prevCart.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
-      }
-      return [...prevCart, { ...item, quantity: 1 }];
-    });
+    setCartCafeName(cafe.name);
+    const existing = cart.find(c => c.id === item.id);
+    if (existing) {
+      setCart(cart.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+    } else {
+      setCart([...cart, { ...item, quantity: 1 }]);
+    }
     setLastAddedItem(item.name);
     setTimeout(() => setLastAddedItem(null), 2000);
   };
 
-  const updateQuantity = (id: number, delta: number) => {
-    setCart(prevCart => prevCart.map(item => {
-      if (item.id === id) {
-        const newQty = Math.max(0, item.quantity + delta);
-        return { ...item, quantity: newQty };
-      }
-      return item;
-    }).filter(item => item.quantity > 0));
-  };
-
   const removeFromCart = (id: number) => {
-    setCart(prevCart => prevCart.filter(item => item.id !== id));
+    const newCart = cart.filter(c => c.id !== id);
+    setCart(newCart);
+    if (newCart.length === 0) setCartCafeName(null);
   };
 
-  const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const updateQuantity = (id: number, delta: number) => {
+    const newCart = cart.map(c => {
+      if (c.id === id) {
+        const newQty = Math.max(0, c.quantity + delta);
+        return { ...c, quantity: newQty };
+      }
+      return c;
+    }).filter(c => c.quantity > 0);
+    setCart(newCart);
+    if (newCart.length === 0) setCartCafeName(null);
+  };
+
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  const markReady = async (orderId: number) => {
+    try {
+      const res = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
+      if (res.ok) {
+        setAllOrders(allOrders.map(o => o.id === orderId ? { ...o, status: 'ready' } : o));
+      }
+    } catch (err) {
+      console.error("Failed to mark order as ready:", err);
+    }
+  };
+
+  const handleUpdateMenu = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const url = isAddingItem ? '/admin/api/menu' : `/admin/api/menu/${editingItem?.id}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        loadMenu();
+        setEditingItem(null);
+        setIsAddingItem(false);
+        setSelectedFileName('No file chosen');
+      }
+    } catch (err) {
+      console.error("Failed to update/add menu item:", err);
+    }
+  };
+
+  const handleDeleteItem = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+    try {
+      const res = await fetch(`/admin/api/menu/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadMenu();
+        setEditingItem(null);
+        setIsAddingItem(false);
+      }
+    } catch (err) {
+      console.error("Failed to delete menu item:", err);
+    }
+  };
 
   const handlePayment = async () => {
     if (isPaying) return;
@@ -330,80 +368,97 @@ function App() {
     }
   };
 
-  const markReady = async (orderId: number) => {
-    try {
-        const response = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
-        if (response.ok) {
-            setAllOrders(prev => prev.filter(o => o.id !== orderId));
-        }
-    } catch (err) {
-        console.error('Failed to mark order ready:', err);
-    }
-  };
-
-  const filteredCafes = useMemo(() => filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location.includes(filter)), [filter]);
-  const locations = ['All', 'Central campus', 'Social Sciences Building', 'Humanities Building', 'Rothberg area'];
+  const locations = useMemo(() => ['All', ...new Set(CAFE_DATA.map(c => c.location))], []);
+  const filteredCafes = useMemo(() => {
+    return filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location === filter);
+  }, [filter]);
 
   // --- SUB-COMPONENTS ---
 
-  const UserProfile = () => (
-    <div className="profile-section fade-in">
-      <div className="profile-header">
-        <div className="profile-avatar">{user?.username[0].toUpperCase()}</div>
-        <div className="profile-info">
-          <h2>{user?.username}</h2>
-          <p>HUJI Student | Campus Explorer</p>
-        </div>
-      </div>
+  const UserProfile = () => {
+    const groupedOrders = useMemo(() => {
+      const groups: { [key: string]: any[] } = {};
+      orderHistory.forEach(order => {
+        if (!groups[order.cafe_name]) groups[order.cafe_name] = [];
+        groups[order.cafe_name].push(order);
+      });
+      return groups;
+    }, [orderHistory]);
 
-      <div className="profile-content-grid">
-        <div className="history-column">
-          <h3 className="section-title">Order History</h3>
-          {orderHistory.length === 0 ? (
-            <div className="empty-state">No past orders yet.</div>
-          ) : (
-            <div className="history-list">
-              {orderHistory.map(order => (
-                <div key={order.id} className="history-card">
-                  <div className="history-card-header">
-                    <div>
-                      <div className="history-cafe">{order.cafe_name}</div>
-                      <div className="history-date">{new Date(order.created_at).toLocaleDateString()}</div>
+    return (
+      <div className="profile-section fade-in">
+        <div className="profile-header">
+          <div className="profile-avatar">{user?.username[0].toUpperCase()}</div>
+          <div className="profile-info">
+            <h2>{user?.username}</h2>
+            <p>HUJI Student | Campus Explorer</p>
+          </div>
+        </div>
+
+        <div className="profile-content-grid">
+          <div className="history-column">
+            <h3 className="section-title">Order History</h3>
+            {orderHistory.length === 0 ? (
+              <div className="empty-state">No past orders yet.</div>
+            ) : (
+              <div className="history-list">
+                {Object.entries(groupedOrders).map(([cafeName, orders]) => (
+                  <div key={cafeName} className="cafe-history-group" style={{ marginBottom: '3rem' }}>
+                    <h4 style={{ 
+                      fontSize: '1.4rem', 
+                      fontWeight: 800, 
+                      color: '#000', 
+                      marginBottom: '1.5rem', 
+                      paddingBottom: '0.5rem',
+                      borderBottom: '2px solid var(--warm-accent)'
+                    }}>
+                      {cafeName}
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {orders.map(order => (
+                        <div key={order.id} className="history-card">
+                          <div className="history-card-header">
+                            <div>
+                              <div className="history-date" style={{ color: '#000', fontWeight: 600 }}>{new Date(order.created_at).toLocaleDateString()}</div>
+                            </div>
+                            <span className={`status-pill ${order.status}`} style={{ color: '#000', fontWeight: 800 }}>{order.status.toUpperCase()}</span>
+                          </div>
+                          <div className="history-items" style={{ color: '#333' }}>
+                            {order.items.map((it: any, idx: number) => (
+                              <span key={idx}>{it.name}{idx < order.items.length - 1 ? ', ' : ''}</span>
+                            ))}
+                          </div>
+                          <button className="reorder-btn" onClick={() => reorder(order)}>Reorder Now</button>
+                        </div>
+                      ))}
                     </div>
-                    <span className={`status-pill ${order.status}`}>{order.status}</span>
                   </div>
-                  <div className="history-items">
-                    {order.items.map((it: any, idx: number) => (
-                      <span key={idx}>{it.name}{idx < order.items.length - 1 ? ', ' : ''}</span>
-                    ))}
-                  </div>
-                  <button className="reorder-btn" onClick={() => reorder(order)}>Reorder Now</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-        <div className="favorites-column">
-          <h3 className="section-title">Favorite Drinks</h3>
-          {favorites.length === 0 ? (
-            <div className="empty-state">Save your go-to drinks here.</div>
-          ) : (
-            <div className="favorites-list">
-              {menu.filter(m => favorites.includes(m.id)).map(item => (
-                <div key={item.id} className="fav-item">
-                  <div style={{fontWeight: 700}}>{item.name}</div>
-                  <div className="fav-actions">
-                    <button className="fav-toggle-btn active" onClick={() => toggleFavorite(item.id)}>❤️</button>
+          <div className="favorites-column">
+            <h3 className="section-title">Favorite Drinks</h3>
+            {favorites.length === 0 ? (
+              <div className="empty-state">Save your go-to drinks here.</div>
+            ) : (
+              <div className="favorites-list">
+                {menu.filter(m => favorites.includes(m.id)).map(item => (
+                  <div key={item.id} className="fav-item">
+                    <div style={{fontWeight: 700, color: '#000'}}>{item.name}</div>
+                    <div className="fav-actions">
+                      <button className="fav-toggle-btn active" onClick={() => toggleFavorite(item.id)}>❤️</button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // --- RENDER LOGIC ---
 
@@ -415,7 +470,8 @@ function App() {
             <div className="cafe-icon-wrapper">☕</div>
             <div className="branding-line"></div>
           </div>
-          <h1>{isRegistering ? 'Create Account' : (viewMode === 'admin' ? 'Staff Portal' : 'Student Access')}</h1>
+          <h1 style={{ color: '#000', fontSize: '2rem', marginBottom: '0.5rem', fontWeight: 900 }}>Hebrew University</h1>
+          <h2 style={{ color: 'var(--primary)', fontSize: '1.2rem', marginBottom: '2rem', fontWeight: 700 }}>Cafeteria Ordering & Management</h2>
           <form onSubmit={isRegistering ? handleRegister : handleLogin}>
             <input type="text" placeholder="Username" required value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value.toLowerCase()})} />
             <div style={{ position: 'relative' }}>
@@ -487,7 +543,7 @@ function App() {
         </div>
       );
     }
-    const pendingOrders = allOrders.filter(o => o.status === 'pending' && o.cafe_name === adminSelectedCafe);
+    const activeOrders = allOrders.filter(o => (o.status === 'pending' || o.status === 'ready') && o.cafe_name === adminSelectedCafe);
     return (
       <div className="container" style={{paddingTop: '3rem'}}>
           <div className="admin-header" style={{borderColor: '#000', borderBottom: '2px solid #000'}}>
@@ -495,7 +551,8 @@ function App() {
                 <h1 style={{color: '#000', fontSize: '3rem', fontWeight: 900, margin: 0}}>{adminSelectedCafe}</h1>
                 <p style={{color: 'var(--primary)', fontWeight: 600, margin: '5px 0 0'}}>Dashboard Manager: {user.username}</p>
             </div>
-            <div style={{display: 'flex', gap: '1rem'}}>
+            <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
+                <span style={{ color: '#000', fontWeight: 800, fontSize: '1.1rem', marginRight: '1rem' }}>Hi, {user.username}</span>
                 {!user.assigned_cafe && <button className="admin-nav-btn" onClick={() => setAdminSelectedCafe(null)}>Switch Cafe</button>}
                 {!user.assigned_cafe && <button className="admin-nav-btn" onClick={() => setViewMode('student')}>Exit to Student View</button>}
                 <button className="admin-nav-btn" style={{borderColor: '#ccc', color: '#888'}} onClick={handleLogout}>Logout</button>
@@ -504,57 +561,64 @@ function App() {
           <div style={{display: 'grid', gridTemplateColumns: '1fr 400px', gap: '3rem'}}>
             <div className="orders-grid">
                 <h2 style={{fontSize: '1.8rem', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem', color: '#000'}}>Live Orders</h2>
-                {pendingOrders.length === 0 ? (
+                {activeOrders.length === 0 ? (
                     <div className="status-screen" style={{gridColumn: '1/-1', background: 'white', padding: '5rem'}}>
                         <div style={{fontSize: '4rem'}}>☕</div>
-                        <p style={{fontWeight: 600, marginTop: '1rem', color: '#000'}}>No pending orders for {adminSelectedCafe}.</p>
+                        <p style={{fontWeight: 600, marginTop: '1rem', color: '#000'}}>No active orders for {adminSelectedCafe}.</p>
                     </div>
                 ) : (
-                    pendingOrders.map(order => (
-                        <div key={order.id} className="order-card-admin" style={{borderLeftColor: '#000'}}>
-                            <span className="badge" style={{background: '#000', color: '#fff'}}>QUEUE #{order.queue_number}</span>
+                    activeOrders.map(order => (
+                        <div key={order.id} className={`order-card-admin ${order.status}`} style={{borderLeftColor: order.status === 'ready' ? 'var(--primary)' : '#000'}}>
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start'}}>
+                              <span className="badge" style={{background: order.status === 'ready' ? 'var(--primary)' : '#000', color: '#fff'}}>QUEUE #{order.queue_number}</span>
+                              {order.status === 'ready' && <span className="status-pill ready">READY</span>}
+                            </div>
                             <h3 style={{fontSize: '1.8rem', margin: '1rem 0', color: '#000'}}>{order.customer}</h3>
                             <ul className="order-items-list">{order.items.map((it, idx) => <li key={idx} style={{fontSize: '1.1rem', color: '#000'}}>• {it}</li>)}</ul>
-                            <button className="pay-btn" style={{marginTop: '1.5rem', background: '#000'}} onClick={() => markReady(order.id)}>Mark as Ready</button>
+                            {order.status === 'pending' && <button className="pay-btn" style={{marginTop: '1.5rem', background: '#000'}} onClick={() => markReady(order.id)}>Mark as Ready</button>}
                         </div>
                     ))
                 )}
             </div>
             <div className="menu-manager">
-                <h2 style={{fontSize: '1.8rem', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem', color: '#000'}}>Inventory</h2>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem'}}>
+                    <h2 style={{fontSize: '1.8rem', margin: 0, color: '#000'}}>Inventory</h2>
+                    <button className="admin-nav-btn" style={{background: '#000', color: '#fff'}} onClick={() => { setIsAddingItem(true); setEditingItem(null); setSelectedFileName('No file chosen'); }}>+ Add Item</button>
+                </div>
                 <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
-                    {menu.length > 0 ? menu.map(item => (
-                        <div key={item.id} className="menu-item-btn" style={{background: '#fff', textAlign: 'left', border: '1px solid #eee', padding: '1.5rem'}} onClick={() => { setEditingItem(item); setSelectedFileName('No file chosen'); }}>
+                    {menu.filter(m => m.cafe_name === adminSelectedCafe).length > 0 ? menu.filter(m => m.cafe_name === adminSelectedCafe).map(item => (
+                        <div key={item.id} className="menu-item-btn" style={{background: '#fff', textAlign: 'left', border: '1px solid #eee', padding: '1.5rem'}} onClick={() => { setEditingItem(item); setIsAddingItem(false); setSelectedFileName('No file chosen'); }}>
                             <div style={{display: 'flex', flexDirection: 'column'}}>
                                 <span style={{fontSize: '1.1rem', fontWeight: 800, color: '#000'}}>{item.name}</span>
                                 <span style={{fontSize: '0.8rem', color: '#888', fontWeight: 400}}>{item.ingredients}</span>
                             </div>
                             <strong style={{fontSize: '1.2rem', color: '#000'}}>₪{item.price}</strong>
                         </div>
-                    )) : <p>Loading menu...</p>}
+                    )) : <p style={{color: '#666', textAlign: 'center', padding: '2rem'}}>No items in your menu yet.</p>}
                 </div>
             </div>
           </div>
-          {editingItem && (
-              <div className="modal-overlay" onClick={() => setEditingItem(null)}>
+          {(editingItem || isAddingItem) && (
+              <div className="modal-overlay" onClick={() => { setEditingItem(null); setIsAddingItem(false); }}>
                   <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: '500px', borderRadius: '24px', padding: '3rem'}}>
-                      <h2 style={{fontSize: '2.2rem', fontWeight: 900, marginBottom: '2rem', color: '#000'}}>Edit Item</h2>
+                      <h2 style={{fontSize: '2.2rem', fontWeight: 900, marginBottom: '2rem', color: '#000'}}>{isAddingItem ? 'Add New Item' : 'Edit Item'}</h2>
                       <form onSubmit={handleUpdateMenu} style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
                           <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Item Name</label>
-                          <input type="text" name="name" defaultValue={editingItem.name} style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
+                          <input type="text" name="name" defaultValue={editingItem?.name || ''} required style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
                           <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Price (₪)</label>
-                          <input type="number" name="price" defaultValue={editingItem.price} step="0.1" style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 700, color: '#000', background: '#fafafa'}} />
+                          <input type="number" name="price" defaultValue={editingItem?.price || ''} step="0.1" required style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 700, color: '#000', background: '#fafafa'}} />
                           <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Ingredients</label>
-                          <textarea name="ingredients" defaultValue={editingItem.ingredients} style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', minHeight: '100px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
-                          <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>Update Image</label>
+                          <textarea name="ingredients" defaultValue={editingItem?.ingredients || ''} required style={{border: '1.5px solid #eee', padding: '1rem', borderRadius: '12px', minHeight: '100px', fontSize: '1rem', color: '#000', background: '#fafafa'}} />
+                          <label style={{fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#000'}}>{isAddingItem ? 'Item Image' : 'Update Image'}</label>
                           <div className="custom-file-input">
                               <label htmlFor="file-upload" className="file-label">Choose File</label>
                               <span className="file-name">{selectedFileName}</span>
                               <input id="file-upload" type="file" name="image" onChange={(e) => setSelectedFileName(e.target.files?.[0]?.name || 'No file chosen')} style={{display: 'none'}} />
                           </div>
-                          <div style={{display: 'flex', gap: '1rem', marginTop: '1rem'}}>
-                              <button type="submit" className="save-btn" style={{flex: 1}}>Save Changes</button>
-                              <button type="button" className="admin-nav-btn" style={{flex: 1, borderRadius: '8px', border: '1.5px solid #eee'}} onClick={() => setEditingItem(null)}>Cancel</button>
+                          <div style={{display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem'}}>
+                              <button type="submit" className="save-btn" style={{flex: 1, minWidth: '150px'}}>{isAddingItem ? 'Add Item' : 'Save Changes'}</button>
+                              {!isAddingItem && editingItem && <button type="button" className="admin-nav-btn" style={{flex: 1, minWidth: '150px', borderColor: 'var(--high)', color: 'var(--high)'}} onClick={() => handleDeleteItem(editingItem.id)}>Delete Item</button>}
+                              <button type="button" className="admin-nav-btn" style={{flex: 1, minWidth: '150px', borderRadius: '8px', border: '1.5px solid #eee'}} onClick={() => { setEditingItem(null); setIsAddingItem(false); }}>Cancel</button>
                           </div>
                       </form>
                   </div>
@@ -576,6 +640,9 @@ function App() {
                   <button className={`nav-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>My Profile</button>
                   <button className="nav-btn logout-btn" onClick={handleLogout}>Logout</button>
                 </nav>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                  <span style={{ color: '#000', fontWeight: 800, fontSize: '1.1rem' }}>Hi, {user?.username}</span>
+                </div>
             </div>
             <div className="title-container"><div className="main-title">CAFENOW</div><div className="sub-title">HUJI</div><p className="hero-description">Order Faster. Skip the Line. Enjoy Your Coffee.</p></div>
         </div>
@@ -638,7 +705,7 @@ function App() {
               <button className="filter-btn" onClick={() => setSelectedCafe(null)}>Close</button>
             </div>
             <div className="menu-grid-detailed">
-              {menu.length > 0 ? menu.map(item => (
+              {menu.filter(m => m.cafe_name === selectedCafe.name).length > 0 ? menu.filter(m => m.cafe_name === selectedCafe.name).map(item => (
                 <div key={item.id} style={{position: 'relative'}}>
                   <button className="menu-item-btn" onClick={() => addToCart(item, selectedCafe)}>
                     <div style={{textAlign: 'left'}}><div style={{fontWeight: '800'}}>{item.name}</div><div style={{fontSize: '0.75rem', fontWeight: 'normal', marginTop: '0.3rem', color: 'var(--text-light)'}}>{item.ingredients}</div></div>
@@ -651,7 +718,7 @@ function App() {
                     {favorites.includes(item.id) ? '❤️' : '🤍'}
                   </button>
                 </div>
-              )) : <p>Loading menu items...</p>}
+              )) : <p>No items available for this café.</p>}
             </div>
           </div>
         </div>
