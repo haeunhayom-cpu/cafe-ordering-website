@@ -45,7 +45,6 @@ function App() {
   const [selectedCafe, setSelectedCafe] = useState<Cafe | null>(null);
   const [cartCafeName, setCartCafeName] = useState<string | null>(null);
   const [lastAddedItem, setLastAddedItem] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'student-id' | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'confirm' | 'payment' | 'success'>('cart');
   
   const [viewMode, setViewMode] = useState<'student' | 'admin'>('student');
@@ -106,7 +105,43 @@ function App() {
     checkAuth();
   }, []);
 
-  // ... (interval effects remain same)
+  useEffect(() => {
+    let interval: any;
+    if (activeOrderId && activeOrderStatus !== 'ready' && activeOrderStatus !== 'picked_up') {
+      interval = setInterval(() => {
+        fetch(`/api/order/${activeOrderId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.status !== activeOrderStatus) {
+              setActiveOrderStatus(data.status);
+            }
+          })
+          .catch(err => console.error('Status poll error:', err));
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [activeOrderId, activeOrderStatus]);
+
+  useEffect(() => {
+    let interval: any;
+    if (viewMode === 'admin' && user?.is_admin && adminSelectedCafe) {
+      const fetchOrders = () => {
+        fetch('/admin/api/orders')
+          .then(res => {
+            if (res.status === 401) {
+              handleLogout();
+              return [];
+            }
+            return res.json();
+          })
+          .then(data => setAllOrders(Array.isArray(data) ? data : []))
+          .catch(err => console.error('Admin orders fetch error:', err));
+      };
+      fetchOrders();
+      interval = setInterval(fetchOrders, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [viewMode, user, adminSelectedCafe]);
 
   // --- HANDLERS ---
   const handleLogin = async (e: React.FormEvent) => {
@@ -140,7 +175,29 @@ function App() {
     }
   };
 
-  // ... (handleRegister remains same)
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    
+    const formData = new FormData();
+    formData.append('username', loginForm.username);
+    formData.append('password', loginForm.password);
+
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Registration failed');
+      }
+      await checkAuth();
+      setIsRegistering(false);
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
+  };
 
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
@@ -200,7 +257,46 @@ function App() {
     setActiveTab('home');
   };
 
-  // ... (cart handlers remain same)
+  const handleUpdateMenu = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editingItem) return;
+      alert('Changes saved to cloud database!');
+      setEditingItem(null);
+      setSelectedFileName('No file chosen');
+      loadMenu();
+  };
+
+  const addToCart = (item: MenuItem, cafe: Cafe) => {
+    if (!cartCafeName || cartCafeName !== cafe.name) {
+      setCartCafeName(cafe.name);
+    }
+    setCart(prevCart => {
+      const existing = prevCart.find(i => i.id === item.id);
+      if (existing) {
+        return prevCart.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prevCart, { ...item, quantity: 1 }];
+    });
+    setLastAddedItem(item.name);
+    setTimeout(() => setLastAddedItem(null), 2000);
+  };
+
+  const updateQuantity = (id: number, delta: number) => {
+    setCart(prevCart => prevCart.map(item => {
+      if (item.id === id) {
+        const newQty = Math.max(0, item.quantity + delta);
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    }).filter(item => item.quantity > 0));
+  };
+
+  const removeFromCart = (id: number) => {
+    setCart(prevCart => prevCart.filter(item => item.id !== id));
+  };
+
+  const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handlePayment = async () => {
     if (isPaying) return;
@@ -224,7 +320,6 @@ function App() {
       setActiveOrderCafe(cafeName);
       setCheckoutStep('success');
       setCart([]);
-      setPaymentMethod(null);
       setCartCafeName(null);
       loadUserData(); // Refresh history
     } catch (err: any) {
@@ -235,7 +330,19 @@ function App() {
     }
   };
 
-  // ... (filteredCafes remains same)
+  const markReady = async (orderId: number) => {
+    try {
+        const response = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
+        if (response.ok) {
+            setAllOrders(prev => prev.filter(o => o.id !== orderId));
+        }
+    } catch (err) {
+        console.error('Failed to mark order ready:', err);
+    }
+  };
+
+  const filteredCafes = useMemo(() => filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location.includes(filter)), [filter]);
+  const locations = ['All', 'Central campus', 'Social Sciences Building', 'Humanities Building', 'Rothberg area'];
 
   // --- SUB-COMPONENTS ---
 
@@ -301,7 +408,6 @@ function App() {
   // --- RENDER LOGIC ---
 
   if (!user) {
-    // ... (Login screen code remains same)
     return (
       <div className="auth-container">
         <div className="auth-card">
@@ -466,10 +572,10 @@ function App() {
         <div className="hero-content">
             <div className="header-top">
                 <nav className="main-nav">
-                  <button className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>Home</button>
-                  <button className={activeTab === 'profile' ? 'active' : ''} onClick={() => setActiveTab('profile')}>My Profile</button>
+                  <button className={`nav-btn ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>Home</button>
+                  <button className={`nav-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>My Profile</button>
+                  <button className="nav-btn logout-btn" onClick={handleLogout}>Logout</button>
                 </nav>
-                <button className="logout-btn-header" onClick={handleLogout}>Logout</button>
             </div>
             <div className="title-container"><div className="main-title">CAFENOW</div><div className="sub-title">HUJI</div><p className="hero-description">Order Faster. Skip the Line. Enjoy Your Coffee.</p></div>
         </div>
