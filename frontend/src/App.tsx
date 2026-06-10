@@ -62,9 +62,12 @@ function App() {
   const loadMenu = async () => {
     try {
       const res = await fetch('/api/menu');
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      setMenu(data);
+      if (!res.ok) throw new Error(`Menu fetch failed: ${res.status}`);
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        setMenu(data);
+      }
     } catch (err) {
       console.error("Menu fetch error:", err);
     }
@@ -76,8 +79,19 @@ function App() {
         fetch('/api/user/orders'),
         fetch('/api/user/favorites')
       ]);
-      if (ordersRes.ok) setOrderHistory(await ordersRes.json());
-      if (favsRes.ok) setFavorites(await favsRes.json());
+      
+      if (ordersRes.ok) {
+        const ct = ordersRes.headers.get("content-type");
+        if (ct && ct.includes("application/json")) {
+          setOrderHistory(await ordersRes.json());
+        }
+      }
+      if (favsRes.ok) {
+        const ct = favsRes.headers.get("content-type");
+        if (ct && ct.includes("application/json")) {
+          setFavorites(await favsRes.json());
+        }
+      }
     } catch (err) {
       console.error("Failed to load user data:", err);
     }
@@ -87,13 +101,16 @@ function App() {
     try {
       const res = await fetch('/api/me');
       if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-        if (data.is_admin) {
-          setViewMode('admin');
-          if (data.assigned_cafe) setAdminSelectedCafe(data.assigned_cafe);
-        } else {
-          loadUserData();
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          setUser(data);
+          if (data.is_admin) {
+            setViewMode('admin');
+            if (data.assigned_cafe) setAdminSelectedCafe(data.assigned_cafe);
+          } else {
+            loadUserData();
+          }
         }
       }
     } catch (err) {
@@ -154,18 +171,30 @@ function App() {
         method: 'POST',
         body: formData
       });
+      
+      const contentType = res.headers.get("content-type");
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Login failed');
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          throw new Error(data.error || 'Login failed');
+        } else {
+          const text = await res.text();
+          throw new Error(text || `Server error: ${res.status}`);
+        }
       }
-      const data = await res.json();
-      setUser(data.user);
-      if (data.user.is_admin) {
-        setViewMode('admin');
-        if (data.user.assigned_cafe) setAdminSelectedCafe(data.user.assigned_cafe);
+
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        setUser(data.user);
+        if (data.user.is_admin) {
+          setViewMode('admin');
+          if (data.user.assigned_cafe) setAdminSelectedCafe(data.user.assigned_cafe);
+        } else {
+          setViewMode('student');
+          loadUserData();
+        }
       } else {
-        setViewMode('student');
-        loadUserData();
+        throw new Error("Invalid server response format");
       }
     } catch (err: any) {
       setAuthError(err.message);
@@ -185,10 +214,18 @@ function App() {
         method: 'POST',
         body: formData
       });
+      
+      const contentType = res.headers.get("content-type");
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Registration failed');
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          throw new Error(data.error || 'Registration failed');
+        } else {
+          const text = await res.text();
+          throw new Error(text || `Server error: ${res.status}`);
+        }
       }
+      
       await checkAuth();
       setIsRegistering(false);
     } catch (err: any) {
@@ -362,16 +399,30 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item_ids: itemIds, cafe_name: cafeName })
       });
-      if (!response.ok) throw new Error("Order failed");
-      const data = await response.json();
-      setActiveOrderId(data.order_id);
-      setActiveOrderQueueNumber(data.queue_number);
-      setActiveOrderStatus('pending');
-      setActiveOrderCafe(cafeName);
-      setCheckoutStep('success');
-      setCart([]);
-      setCartCafeName(null);
-      loadUserData(); // Refresh history
+      
+      const contentType = response.headers.get("content-type");
+      if (!response.ok) {
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "Order failed");
+        } else {
+          throw new Error(`Order failed with status ${response.status}`);
+        }
+      }
+
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        setActiveOrderId(data.order_id);
+        setActiveOrderQueueNumber(data.queue_number);
+        setActiveOrderStatus('pending');
+        setActiveOrderCafe(cafeName);
+        setCheckoutStep('success');
+        setCart([]);
+        setCartCafeName(null);
+        loadUserData(); // Refresh history
+      } else {
+        throw new Error("Invalid server response during order");
+      }
     } catch (err: any) {
       alert(`Order Failed: Check if server is running`);
       setCheckoutStep('cart');

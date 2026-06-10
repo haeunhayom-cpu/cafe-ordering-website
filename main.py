@@ -10,6 +10,13 @@ import uuid
 
 app = FastAPI()
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal Server Error", "detail": str(exc)},
+    )
+
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
@@ -77,12 +84,13 @@ async def login(username: str = Form(...), password: str = Form(...)):
             "assigned_cafe": user.assigned_cafe
         }
     })
-    # Use a single session cookie for simplicity
     response.set_cookie(key="session_user", value=username, httponly=True)
     return response
 
 @app.post("/api/register")
 async def register(username: str = Form(...), password: str = Form(...)):
+    if not username or not password:
+        return JSONResponse(content={"error": "Username and password required"}, status_code=400)
     if User.select().where(User.username == username).exists():
         return JSONResponse(content={"error": "Username already exists"}, status_code=400)
 
