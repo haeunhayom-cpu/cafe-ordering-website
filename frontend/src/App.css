@@ -1173,3 +1173,25 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Cafe Status Tags */
+.status-tag {
+  padding: 0.3rem 0.8rem;
+  border-radius: 50px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.status-tag.open {
+  background: #ebfbee;
+  color: #2b8a3e;
+  border: 1px solid #d3f9d8;
+}
+
+.status-tag.closed {
+  background: #fff5f5;
+  color: #c92a2a;
+  border: 1px solid #ffe3e3;
+}
