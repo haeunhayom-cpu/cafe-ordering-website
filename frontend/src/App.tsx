@@ -231,6 +231,18 @@ function App() {
     }
   };
 
+  const toggleAvailability = async (itemId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/admin/api/menu/${itemId}/availability`, { method: 'POST' });
+      if (res.ok) {
+        loadMenu();
+      }
+    } catch (err) {
+      console.error("Failed to toggle availability:", err);
+    }
+  };
+
   const reorder = (order: any) => {
     const cafe = CAFE_DATA.find(c => c.name === order.cafe_name);
     if (!cafe) return;
@@ -587,12 +599,21 @@ function App() {
                 </div>
                 <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                     {menu.filter(m => m.cafe_name === adminSelectedCafe).length > 0 ? menu.filter(m => m.cafe_name === adminSelectedCafe).map(item => (
-                        <div key={item.id} className="menu-item-btn" style={{background: '#fff', textAlign: 'left', border: '1px solid #eee', padding: '1.5rem'}} onClick={() => { setEditingItem(item); setIsAddingItem(false); setSelectedFileName('No file chosen'); }}>
+                        <div key={item.id} className={`menu-item-btn admin ${!item.is_available ? 'out-of-stock-admin' : ''}`} style={{background: '#fff', textAlign: 'left', border: '1px solid #eee', padding: '1.5rem', position: 'relative'}} onClick={() => { setEditingItem(item); setIsAddingItem(false); setSelectedFileName('No file chosen'); }}>
                             <div style={{display: 'flex', flexDirection: 'column'}}>
-                                <span style={{fontSize: '1.1rem', fontWeight: 800, color: '#000'}}>{item.name}</span>
+                                <span style={{fontSize: '1.1rem', fontWeight: 800, color: '#000'}}>{item.name} {!item.is_available && <span style={{color: 'var(--high)', fontSize: '0.7rem', verticalAlign: 'middle', marginLeft: '5px'}}>[OUT OF STOCK]</span>}</span>
                                 <span style={{fontSize: '0.8rem', color: '#888', fontWeight: 400}}>{item.ingredients}</span>
                             </div>
-                            <strong style={{fontSize: '1.2rem', color: '#000'}}>₪{item.price}</strong>
+                            <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                              <strong style={{fontSize: '1.2rem', color: '#000'}}>₪{item.price}</strong>
+                              <button 
+                                className={`availability-toggle ${item.is_available ? 'active' : ''}`} 
+                                onClick={(e) => toggleAvailability(item.id, e)}
+                                title={item.is_available ? "Mark as Out of Stock" : "Mark as Available"}
+                              >
+                                {item.is_available ? 'In Stock' : 'Sold Out'}
+                              </button>
+                            </div>
                         </div>
                     )) : <p style={{color: '#666', textAlign: 'center', padding: '2rem'}}>No items in your menu yet.</p>}
                 </div>
@@ -707,8 +728,15 @@ function App() {
             <div className="menu-grid-detailed">
               {menu.filter(m => m.cafe_name === selectedCafe.name).length > 0 ? menu.filter(m => m.cafe_name === selectedCafe.name).map(item => (
                 <div key={item.id} style={{position: 'relative'}}>
-                  <button className="menu-item-btn" onClick={() => addToCart(item, selectedCafe)}>
-                    <div style={{textAlign: 'left'}}><div style={{fontWeight: '800'}}>{item.name}</div><div style={{fontSize: '0.75rem', fontWeight: 'normal', marginTop: '0.3rem', color: 'var(--text-light)'}}>{item.ingredients}</div></div>
+                  <button 
+                    className={`menu-item-btn ${!item.is_available ? 'disabled' : ''}`} 
+                    onClick={() => item.is_available && addToCart(item, selectedCafe)}
+                    disabled={!item.is_available}
+                  >
+                    <div style={{textAlign: 'left'}}>
+                      <div style={{fontWeight: '800'}}>{item.name} {!item.is_available && <span className="sold-out-badge">SOLD OUT</span>}</div>
+                      <div style={{fontSize: '0.75rem', fontWeight: 'normal', marginTop: '0.3rem', color: 'var(--text-light)'}}>{item.ingredients}</div>
+                    </div>
                     <span style={{fontSize: '1.1rem'}}>₪{item.price}</span>
                   </button>
                   <button 

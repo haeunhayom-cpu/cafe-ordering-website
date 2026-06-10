@@ -133,7 +133,8 @@ async def logout():
 
 @app.get("/api/menu")
 async def get_menu():
-    items = MenuItem.select().where(MenuItem.stock_count > 0, MenuItem.is_available == True)
+    # Return all items so frontend can show "Out of Stock" rather than hiding them
+    items = MenuItem.select()
     result = list(items.dicts())
     return result
 
@@ -154,6 +155,8 @@ async def place_order(request: Request, order_data: dict):
         new_order = Order.create(customer=user, cafe_name=cafe_name, queue_number=next_q)
         for item_id in item_ids:
             item = MenuItem.get_by_id(item_id)
+            if not item.is_available or item.stock_count <= 0:
+                raise HTTPException(status_code=400, detail=f"Item {item.name} is currently unavailable")
             item.stock_count -= 1
             item.save()
             OrderItem.create(order=new_order, menu_item=item)
@@ -305,6 +308,20 @@ async def update_menu_item(item_id: int, request: Request, name: str = Form(...)
         item.image_url = f"/uploads/{filename}"
     item.save()
     return {"status": "success"}
+
+@app.post("/admin/api/menu/{item_id}/availability")
+async def toggle_item_availability(item_id: int, request: Request):
+    user = get_current_user(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=401)
+    
+    item = MenuItem.get_by_id(item_id)
+    if user.assigned_cafe and item.cafe_name != user.assigned_cafe:
+        raise HTTPException(status_code=403)
+
+    item.is_available = not item.is_available
+    item.save()
+    return {"status": "success", "is_available": item.is_available}
 
 @app.delete("/admin/api/menu/{item_id}")
 async def delete_menu_item(item_id: int, request: Request):
