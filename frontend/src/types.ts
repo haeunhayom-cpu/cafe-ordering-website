@@ -30,8 +30,7 @@ export const CAFE_DATA: Cafe[] = [
   {
     id: 'forum',
     name: 'Forum Café',
-    location: 'Central campus (Mount Scopus)',
-    crowdLevel: 'High',
+    location: 'Mount Scopus',
     waitingTime: 12,
     userGroup: 'General students',
     menuItemIds: [],
@@ -45,8 +44,7 @@ export const CAFE_DATA: Cafe[] = [
   {
     id: 'soc-sci',
     name: 'Social Sciences Vitamin',
-    location: 'Social Sciences Building',
-    crowdLevel: 'Medium',
+    location: 'Mount Scopus',
     waitingTime: 7,
     userGroup: 'Social Sciences students',
     menuItemIds: [],
@@ -60,8 +58,7 @@ export const CAFE_DATA: Cafe[] = [
   {
     id: 'hum-vit',
     name: 'Humanities Vitamin',
-    location: 'Humanities Building',
-    crowdLevel: 'Low',
+    location: 'Mount Scopus',
     waitingTime: 4,
     userGroup: 'Humanities students',
     menuItemIds: [],
@@ -75,8 +72,7 @@ export const CAFE_DATA: Cafe[] = [
   {
     id: 'rothberg',
     name: 'Rothberg Forum Café',
-    location: 'Rothberg area',
-    crowdLevel: 'Medium',
+    location: 'Mount Scopus',
     waitingTime: 8,
     userGroup: 'International students',
     menuItemIds: [],
