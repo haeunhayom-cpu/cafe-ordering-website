@@ -18,72 +18,47 @@ export type Cafe = {
   userGroup: string;
   menuItemIds: number[]; // Mapping to backend IDs
   imageUrl: string;
-  openingHours: {
-    regular: { open: string; close: string }; // Sun-Thu (0-4 in JS getDay where 0=Sun)
-    friday: { open: string; close: string };  // Fri (5)
-    saturday?: { open: string; close: string } | null; // Sat (6)
   };
-};
 
-// Simulated data for recommendation logic
-export const CAFE_DATA: Cafe[] = [
+  // Simulated data for recommendation logic
+  export const CAFE_DATA: Cafe[] = [
   {
     id: 'forum',
     name: 'Forum Café',
-    location: 'Central campus (Mount Scopus)',
-    crowdLevel: 'High',
+    location: 'Mount Scopus',
     waitingTime: 12,
     userGroup: 'General students',
     menuItemIds: [],
-    imageUrl: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=800',
-    openingHours: {
-      regular: { open: '07:00', close: '18:00' },
-      friday: { open: '07:00', close: '13:30' },
-      saturday: null
-    }
+    imageUrl: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=800'
   },
   {
     id: 'soc-sci',
     name: 'Social Sciences Vitamin',
-    location: 'Social Sciences Building',
-    crowdLevel: 'Medium',
+    location: 'Mount Scopus',
     waitingTime: 7,
     userGroup: 'Social Sciences students',
     menuItemIds: [],
-    imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=800',
-    openingHours: {
-      regular: { open: '07:00', close: '18:00' },
-      friday: { open: '07:00', close: '13:30' },
-      saturday: null
-    }
+    imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=800'
   },
   {
     id: 'hum-vit',
     name: 'Humanities Vitamin',
-    location: 'Humanities Building',
-    crowdLevel: 'Low',
+    location: 'Mount Scopus',
     waitingTime: 4,
     userGroup: 'Humanities students',
     menuItemIds: [],
-    imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=800',
-    openingHours: {
-      regular: { open: '07:00', close: '18:00' },
-      friday: { open: '07:00', close: '13:30' },
-      saturday: null
-    }
+    imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=800'
   },
   {
     id: 'rothberg',
     name: 'Rothberg Forum Café',
-    location: 'Rothberg area',
-    crowdLevel: 'Medium',
+    location: 'Mount Scopus',
     waitingTime: 8,
     userGroup: 'International students',
     menuItemIds: [],
-    imageUrl: 'https://images.unsplash.com/photo-1445116572660-236099ec97a0?q=80&w=800',
-    openingHours: {
-      regular: { open: '08:00', close: '16:00' },
-      friday: { open: '08:00', close: '13:00' },
+    imageUrl: 'https://images.unsplash.com/photo-1445116572660-236099ec97a0?q=80&w=800'
+  }
+  ];
       saturday: null
     }
   }
