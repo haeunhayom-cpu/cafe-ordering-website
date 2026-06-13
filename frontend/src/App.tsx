@@ -6,6 +6,7 @@ function App() {
   const [user, setUser] = useState<any>(null);
   const [menu, setMenu] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
+  const [cartCafeName, setCartCafeName] = useState<string | null>(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState('cart'); // cart, confirm, payment, success
   const [activeTab, setActiveTab] = useState('home'); // home, profile
@@ -32,7 +33,7 @@ function App() {
 
   // --- API CALLS ---
 
-  const fetchUser = async () => {
+  const loadUserData = async () => {
     try {
       const res = await fetch('/api/me');
       if (res.ok) {
@@ -46,7 +47,7 @@ function App() {
     } catch (e) {}
   };
 
-  const fetchMenu = async () => {
+  const loadMenu = async () => {
     try {
       const res = await fetch('/api/menu');
       if (res.ok) setMenu(await res.json());
@@ -77,8 +78,8 @@ function App() {
   };
 
   useEffect(() => {
-    fetchUser();
-    fetchMenu();
+    loadUserData();
+    loadMenu();
   }, []);
 
   useEffect(() => {
@@ -100,9 +101,6 @@ function App() {
         if (res.ok) {
           const data = await res.json();
           setActiveOrderStatus(data.status);
-          if (data.status === 'ready') {
-            // No alert - visual update only
-          }
         }
       }, 3000);
       return () => clearInterval(interval);
@@ -139,7 +137,8 @@ function App() {
 
     const res = await fetch('/api/register', { method: 'POST', body: formData });
     if (res.ok) {
-      setUser({ username: loginForm.username, is_admin: false });
+      const data = await res.json();
+      setUser({ username: loginForm.username, is_admin: false, loyalty_points: 0 });
       setViewMode('student');
       setAuthError(null);
     } else {
@@ -155,14 +154,15 @@ function App() {
     setIsCheckoutOpen(false);
     setActiveTab('home');
     setAdminSelectedCafe(null);
+    setCartCafeName(null);
   };
 
   const addToCart = (item: any, cafe: any) => {
-    if (activeOrderCafe && activeOrderCafe !== cafe.name && cart.length > 0) {
-      if (!window.confirm(`You already have items from ${activeOrderCafe} in your cart. Switch to ${cafe.name}?`)) return;
+    if (cartCafeName && cartCafeName !== cafe.name && cart.length > 0) {
+      if (!window.confirm(`You already have items from ${cartCafeName} in your cart. Switch to ${cafe.name}?`)) return;
       setCart([]);
     }
-    setActiveOrderCafe(cafe.name);
+    setCartCafeName(cafe.name);
     setCart(prev => {
       const existing = prev.find(i => i.id === item.id);
       if (existing) return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
@@ -173,36 +173,146 @@ function App() {
   };
 
   const updateQuantity = (id: number, delta: number) => {
-    setCart(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i));
+    const newCart = cart.map(c => {
+      if (c.id === id) {
+        const newQty = Math.max(0, c.quantity + delta);
+        return { ...c, quantity: newQty };
+      }
+      return c;
+    }).filter(c => c.quantity > 0);
+    setCart(newCart);
+    if (newCart.length === 0) setCartCafeName(null);
   };
 
   const removeFromCart = (id: number) => {
-    setCart(prev => prev.filter(i => i.id !== id));
+    const newCart = cart.filter(i => i.id !== id);
+    setCart(newCart);
+    if (newCart.length === 0) setCartCafeName(null);
+  };
+
+  const isCoffee = (item: any) => /americano|latte|cappuccino/i.test(item.name);
+  const isPastry = (item: any) => /croissant|muffin|danish/i.test(item.name);
+
+  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const subTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  const coffeeCount = cart.reduce((sum, item) => sum + (isCoffee(item) ? item.quantity : 0), 0);
+  const pastryCount = cart.reduce((sum, item) => sum + (isPastry(item) ? item.quantity : 0), 0);
+
+  const comboCount = Math.min(coffeeCount, pastryCount);
+  const comboDiscount = comboCount * 5;
+
+  const redeemLoyalty = (user?.loyalty_points >= 10 && coffeeCount > 0);
+  let loyaltyDiscount = 0;
+  if (redeemLoyalty) {
+    const firstCoffee = cart.find(isCoffee);
+    if (firstCoffee) loyaltyDiscount = firstCoffee.price;
+  }
+
+  const totalPrice = subTotal - comboDiscount - loyaltyDiscount;
+
+  const markReady = async (orderId: number) => {
+    try {
+      const res = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
+      if (res.ok) {
+        setAllOrders(allOrders.map(o => o.id === orderId ? { ...o, status: 'ready' } : o));
+      }
+    } catch (err) {
+      console.error("Failed to mark order as ready:", err);
+    }
+  };
+
+  const handleUpdateMenu = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const url = isAddingItem ? '/admin/api/menu' : `/admin/api/menu/${editingItem?.id}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        loadMenu();
+        setEditingItem(null);
+        setIsAddingItem(false);
+        setSelectedFileName('No file chosen');
+      }
+    } catch (err) {
+      console.error("Failed to update/add menu item:", err);
+    }
+  };
+
+  const handleDeleteItem = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+    try {
+      const res = await fetch(`/admin/api/menu/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadMenu();
+        setEditingItem(null);
+        setIsAddingItem(false);
+      }
+    } catch (err) {
+      console.error("Failed to delete menu item:", err);
+    }
   };
 
   const handlePayment = async () => {
-    setCheckoutStep('payment');
-    // Simulate payment delay
-    setTimeout(async () => {
-      const res = await fetch('/api/order', {
+    if (isPaying) return;
+    setIsPaying(true);
+    try {
+      const itemIds: number[] = [];
+      cart.forEach(item => {
+        for (let i = 0; i < item.quantity; i++) itemIds.push(item.id);
+      });
+      const cafeName = cartCafeName || 'Forum Café';
+      const response = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_ids: cart.flatMap(i => Array(i.quantity).fill(i.id)), cafe_name: activeOrderCafe })
+        body: JSON.stringify({ item_ids: itemIds, cafe_name: cafeName, redeem_loyalty: redeemLoyalty })
       });
-      if (res.ok) {
-        const data = await res.json();
+      
+      const contentType = response.headers.get("content-type");
+      if (!response.ok) {
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "Order failed");
+        } else {
+          throw new Error(`Order failed with status ${response.status}`);
+        }
+      }
+
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
         setActiveOrderId(data.order_id);
         setActiveOrderQueueNumber(data.queue_number);
-        setActiveOrderStatus(data.status);
-        setCart([]);
+        setActiveOrderStatus('pending');
+        setActiveOrderCafe(cafeName);
         setCheckoutStep('success');
+        setCart([]);
+        setCartCafeName(null);
         fetchHistory();
+        loadUserData();
       } else {
-        const err = await res.json();
-        alert(err.detail || "Order failed");
-        setCheckoutStep('cart');
+        throw new Error("Invalid server response during order");
       }
-    }, 2000);
+    } catch (err: any) {
+      alert(`Order Failed: Check if server is running`);
+      setCheckoutStep('cart');
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const reorder = async (oldOrder: any) => {
+    setCartCafeName(oldOrder.cafe_name);
+    const newCart = oldOrder.items.map((it: any) => {
+        const menuItem = menu.find(m => m.id === it.id);
+        return { ...menuItem, quantity: 1 };
+    });
+    setCart(newCart);
+    setActiveTab('home');
+    setIsCheckoutOpen(true);
+    setCheckoutStep('cart');
   };
 
   const toggleFavorite = async (itemId: number, e?: React.MouseEvent) => {
@@ -215,53 +325,11 @@ function App() {
     if (res.ok) fetchFavorites();
   };
 
-  const markReady = async (orderId: number) => {
-    const res = await fetch(`/admin/api/order/${orderId}/ready`, { method: 'POST' });
-    if (res.ok) fetchAllOrders();
-  };
-
   const toggleAvailability = async (itemId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     const res = await fetch(`/admin/api/menu/${itemId}/availability`, { method: 'POST' });
-    if (res.ok) fetchMenu();
+    if (res.ok) loadMenu();
   };
-
-  const handleUpdateMenu = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const url = isAddingItem ? '/admin/api/menu' : `/admin/api/menu/${editingItem.id}`;
-    
-    const res = await fetch(url, { method: 'POST', body: formData });
-    if (res.ok) {
-      setEditingItem(null);
-      setIsAddingItem(false);
-      fetchMenu();
-    }
-  };
-
-  const handleDeleteItem = async (itemId: number) => {
-    if (!window.confirm("Delete this item permanently?")) return;
-    const res = await fetch(`/admin/api/menu/${itemId}`, { method: 'DELETE' });
-    if (res.ok) {
-      setEditingItem(null);
-      fetchMenu();
-    }
-  };
-
-  const reorder = async (oldOrder: any) => {
-    setActiveOrderCafe(oldOrder.cafe_name);
-    const newCart = oldOrder.items.map((it: any) => {
-        const menuItem = menu.find(m => m.id === it.id);
-        return { ...menuItem, quantity: 1 };
-    });
-    setCart(newCart);
-    setActiveTab('home');
-    setIsCheckoutOpen(true);
-    setCheckoutStep('cart');
-  };
-
-  const totalItems = cart.reduce((acc, i) => acc + i.quantity, 0);
-  const totalPrice = cart.reduce((acc, i) => acc + i.price * i.quantity, 0);
 
   const locations = useMemo(() => ['All', ...new Set(CAFE_DATA.map(c => c.location))], []);
   const filteredCafes = useMemo(() => {
@@ -269,6 +337,7 @@ function App() {
   }, [filter]);
 
   const isCafeOpen = (cafe: Cafe) => {
+    if (!cafe.openingHours) return false;
     const now = new Date();
     const day = now.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
     const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -301,6 +370,10 @@ function App() {
           <div className="profile-info">
             <h2>{user?.username}</h2>
             <p>HUJI Student | Campus Explorer</p>
+            <div style={{marginTop: '1rem'}}>
+              <span className="badge" style={{background: 'var(--primary)', color: 'white', padding: '0.5rem 1rem', margin: 0}}>☕ Loyalty Points: {user?.loyalty_points || 0} / 10</span>
+              {user?.loyalty_points >= 10 && <p style={{color: 'var(--primary)', fontWeight: 800, marginTop: '0.8rem'}}>🎉 You have a free coffee waiting!</p>}
+            </div>
           </div>
         </div>
 
@@ -611,6 +684,9 @@ function App() {
                         <span className={`status-tag ${isOpen ? 'open' : 'closed'}`}>
                           {isOpen ? '🟢 Open' : '🔴 Closed'}
                         </span>
+                        <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-light)'}}>
+                          Hours: {cafe.openingHours?.regular.open}–{cafe.openingHours?.regular.close}
+                        </span>
                       </div>
                       <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
                       <div className="view-menu-btn"><span>View full menu</span><span>→</span></div>
@@ -631,7 +707,7 @@ function App() {
                 <h2 style={{margin: 0, color: 'var(--primary)'}}>{selectedCafe.name} Menu</h2>
                 <p className="cafe-loc" style={{margin: '5px 0 0'}}>{selectedCafe.location}</p>
                 <p style={{fontSize: '0.7rem', color: '#999', marginTop: '5px', textTransform: 'uppercase', letterSpacing: '1px'}}>
-                  Sun-Thu: {selectedCafe.openingHours.regular.open}-{selectedCafe.openingHours.regular.close} | Fri: {selectedCafe.openingHours.friday.open}-{selectedCafe.openingHours.friday.close}
+                  Sun-Thu: {selectedCafe.openingHours?.regular.open}-{selectedCafe.openingHours?.regular.close} | Fri: {selectedCafe.openingHours?.friday.open}-{selectedCafe.openingHours?.friday.close}
                 </p>
               </div>
               <button className="filter-btn" onClick={() => setSelectedCafe(null)}>Close</button>
@@ -681,6 +757,8 @@ function App() {
                     <button className="remove-btn" onClick={() => removeFromCart(item.id)}>✕</button>
                   </div>
                 ))}</div>
+                {comboDiscount > 0 && <div style={{color: 'var(--primary)', fontWeight: 'bold', textAlign: 'right', marginTop: '1.5rem', fontSize: '1.1rem'}}>Combo Discount: -₪{comboDiscount.toFixed(2)}</div>}
+                {loyaltyDiscount > 0 && <div style={{color: 'var(--primary)', fontWeight: 'bold', textAlign: 'right', marginTop: '0.5rem', fontSize: '1.1rem'}}>Free Coffee (Loyalty): -₪{loyaltyDiscount.toFixed(2)}</div>}
                 <div className="total">Total: ₪{totalPrice.toFixed(2)}</div>
                 <button className="pay-btn" onClick={() => setCheckoutStep('confirm')} disabled={cart.length === 0}>Confirm Details →</button>
               </>
@@ -690,6 +768,8 @@ function App() {
                 <h2 style={{color: 'var(--primary)', marginBottom: '1rem'}}>Confirm Order</h2>
                 <div style={{background: 'white', border: '1px solid var(--warm-accent)', padding: '1.5rem', borderRadius: '20px', marginBottom: '2rem'}}>
                     {cart.map(item => <div key={item.id} style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem'}}><span>{item.name} x {item.quantity}</span><strong>₪{(item.price * item.quantity).toFixed(0)}</strong></div>)}
+                    {comboDiscount > 0 && <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--primary)'}}><span>Combo Discount (Coffee + Pastry)</span><strong>-₪{comboDiscount.toFixed(2)}</strong></div>}
+                    {loyaltyDiscount > 0 && <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--primary)'}}><span>Free Coffee (Loyalty Rewards)</span><strong>-₪{loyaltyDiscount.toFixed(2)}</strong></div>}
                     <div style={{borderTop: '1px solid var(--warm-accent)', marginTop: '1rem', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between'}}><strong>Total</strong><strong style={{color: 'var(--primary)', fontSize: '1.4rem'}}>₪{totalPrice.toFixed(2)}</strong></div>
                 </div>
                 <button className="pay-btn" onClick={handlePayment}>Place Order Now →</button>

@@ -14,6 +14,7 @@ class User(BaseModel):
     password = CharField()
     is_admin = BooleanField(default=False)
     assigned_cafe = CharField(null=True) # For admins, which cafe they manage
+    loyalty_points = IntegerField(default=0)
 
 class MenuItem(BaseModel):
     name = CharField()
