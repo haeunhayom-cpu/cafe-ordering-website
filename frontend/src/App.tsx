@@ -337,8 +337,26 @@ function App() {
     if (newCart.length === 0) setCartCafeName(null);
   };
 
+  const isCoffee = (item: any) => /americano|latte|cappuccino/i.test(item.name);
+  const isPastry = (item: any) => /croissant|muffin|danish/i.test(item.name);
+
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  const coffeeCount = cart.reduce((sum, item) => sum + (isCoffee(item) ? item.quantity : 0), 0);
+  const pastryCount = cart.reduce((sum, item) => sum + (isPastry(item) ? item.quantity : 0), 0);
+
+  const comboCount = Math.min(coffeeCount, pastryCount);
+  const comboDiscount = comboCount * 5;
+
+  const redeemLoyalty = (user?.loyalty_points >= 10 && coffeeCount > 0);
+  let loyaltyDiscount = 0;
+  if (redeemLoyalty) {
+    const firstCoffee = cart.find(isCoffee);
+    if (firstCoffee) loyaltyDiscount = firstCoffee.price;
+  }
+
+  const totalPrice = subTotal - comboDiscount - loyaltyDiscount;
 
   const markReady = async (orderId: number) => {
     try {
@@ -397,7 +415,7 @@ function App() {
       const response = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_ids: itemIds, cafe_name: cafeName })
+        body: JSON.stringify({ item_ids: itemIds, cafe_name: cafeName, redeem_loyalty: redeemLoyalty })
       });
       
       const contentType = response.headers.get("content-type");
@@ -436,6 +454,21 @@ function App() {
     return filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location === filter);
   }, [filter]);
 
+  const isCafeOpen = (cafe: Cafe) => {
+    if (!cafe.openingHours) return false;
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    let hours;
+    if (day === 5) hours = cafe.openingHours.friday;
+    else if (day === 6) hours = cafe.openingHours.saturday;
+    else hours = cafe.openingHours.regular;
+
+    if (!hours) return false;
+    return currentTimeStr >= hours.open && currentTimeStr <= hours.close;
+  };
+
   // --- SUB-COMPONENTS ---
 
   const UserProfile = () => {
@@ -455,6 +488,10 @@ function App() {
           <div className="profile-info">
             <h2>{user?.username}</h2>
             <p>HUJI Student | Campus Explorer</p>
+            <div style={{marginTop: '1rem'}}>
+              <span className="badge" style={{background: 'var(--primary)', color: 'white', padding: '0.5rem 1rem', margin: 0}}>☕ Loyalty Points: {user?.loyalty_points || 0} / 10</span>
+              {user?.loyalty_points >= 10 && <p style={{color: 'var(--primary)', fontWeight: 800, marginTop: '0.8rem'}}>🎉 You have a free coffee waiting!</p>}
+            </div>
           </div>
         </div>
 
@@ -755,16 +792,26 @@ function App() {
             </div>
             <div className="filter-bar">{locations.map(loc => <button key={loc} className={`filter-btn ${filter === loc ? 'active' : ''}`} onClick={() => setFilter(loc)}>{loc}</button>)}</div>
             <div className="cafe-grid">
-              {filteredCafes.map(cafe => (
-                <div key={cafe.id} className="cafe-card" onClick={() => setSelectedCafe(cafe)}>
-                  <img src={cafe.imageUrl} className="cafe-img" alt={cafe.name} onError={e => (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=800'} />
-                  <div className="cafe-info">
-                    <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-light)', display: 'block', marginBottom: '0.5rem'}}>Wait: {cafe.waitingTime}m</span>
-                    <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
-                    <div className="view-menu-btn"><span>View full menu</span><span>→</span></div>
+              {filteredCafes.map(cafe => {
+                const isOpen = isCafeOpen(cafe);
+                return (
+                  <div key={cafe.id} className="cafe-card" onClick={() => setSelectedCafe(cafe)}>
+                    <img src={cafe.imageUrl} className="cafe-img" alt={cafe.name} onError={e => (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=800'} />
+                    <div className="cafe-info">
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+                        <span className={`status-tag ${isOpen ? 'open' : 'closed'}`}>
+                          {isOpen ? '🟢 Open' : '🔴 Closed'}
+                        </span>
+                        <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-light)'}}>
+                          Hours: {cafe.openingHours?.regular.open}–{cafe.openingHours?.regular.close}
+                        </span>
+                      </div>
+                      <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
+                      <div className="view-menu-btn"><span>View full menu</span><span>→</span></div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
@@ -825,6 +872,8 @@ function App() {
                     <button className="remove-btn" onClick={() => removeFromCart(item.id)}>✕</button>
                   </div>
                 ))}</div>
+                {comboDiscount > 0 && <div style={{color: 'var(--primary)', fontWeight: 'bold', textAlign: 'right', marginTop: '1.5rem', fontSize: '1.1rem'}}>Combo Discount: -₪{comboDiscount.toFixed(2)}</div>}
+                {loyaltyDiscount > 0 && <div style={{color: 'var(--primary)', fontWeight: 'bold', textAlign: 'right', marginTop: '0.5rem', fontSize: '1.1rem'}}>Free Coffee (Loyalty): -₪{loyaltyDiscount.toFixed(2)}</div>}
                 <div className="total">Total: ₪{totalPrice.toFixed(2)}</div>
                 <button className="pay-btn" onClick={() => setCheckoutStep('confirm')} disabled={cart.length === 0}>Confirm Details →</button>
               </>
@@ -834,6 +883,8 @@ function App() {
                 <h2 style={{color: 'var(--primary)', marginBottom: '1rem'}}>Confirm Order</h2>
                 <div style={{background: 'white', border: '1px solid var(--warm-accent)', padding: '1.5rem', borderRadius: '20px', marginBottom: '2rem'}}>
                     {cart.map(item => <div key={item.id} style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem'}}><span>{item.name} x {item.quantity}</span><strong>₪{(item.price * item.quantity).toFixed(0)}</strong></div>)}
+                    {comboDiscount > 0 && <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--primary)'}}><span>Combo Discount (Coffee + Pastry)</span><strong>-₪{comboDiscount.toFixed(2)}</strong></div>}
+                    {loyaltyDiscount > 0 && <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--primary)'}}><span>Free Coffee (Loyalty Rewards)</span><strong>-₪{loyaltyDiscount.toFixed(2)}</strong></div>}
                     <div style={{borderTop: '1px solid var(--warm-accent)', marginTop: '1rem', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between'}}><strong>Total</strong><strong style={{color: 'var(--primary)', fontSize: '1.4rem'}}>₪{totalPrice.toFixed(2)}</strong></div>
                 </div>
                 <button className="pay-btn" onClick={handlePayment}>Place Order Now →</button>

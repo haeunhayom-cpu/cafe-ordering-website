@@ -154,6 +154,7 @@ async def place_order(request: Request, order_data: dict):
 
     item_ids = order_data.get("item_ids", [])
     cafe_name = order_data.get("cafe_name")
+    redeem_loyalty = order_data.get("redeem_loyalty", False)
 
     with db.atomic():
         # Resetting Cafe-Specific Queue Logic
@@ -161,6 +162,9 @@ async def place_order(request: Request, order_data: dict):
         next_q = active_count + 1
 
         new_order = Order.create(customer=user, cafe_name=cafe_name, queue_number=next_q)
+        
+        coffees_bought = 0
+
         for item_id in item_ids:
             item = MenuItem.get_by_id(item_id)
             if not item.is_available or item.stock_count <= 0:
@@ -168,6 +172,17 @@ async def place_order(request: Request, order_data: dict):
             item.stock_count -= 1
             item.save()
             OrderItem.create(order=new_order, menu_item=item)
+            
+            # Count coffees for loyalty points
+            name_lower = item.name.lower()
+            if 'americano' in name_lower or 'latte' in name_lower or 'cappuccino' in name_lower:
+                coffees_bought += 1
+        
+        if not user.is_admin:
+            if redeem_loyalty and user.loyalty_points >= 10:
+                user.loyalty_points -= 10
+            user.loyalty_points += coffees_bought
+            user.save()
 
     return {"order_id": new_order.id, "queue_number": new_order.queue_number, "status": new_order.status}
 
