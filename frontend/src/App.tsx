@@ -436,6 +436,20 @@ function App() {
     return filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location === filter);
   }, [filter]);
 
+  const isCafeOpen = (cafe: Cafe) => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    let hours;
+    if (day === 5) hours = cafe.openingHours.friday;
+    else if (day === 6) hours = cafe.openingHours.saturday;
+    else hours = cafe.openingHours.regular;
+
+    if (!hours) return false;
+    return currentTimeStr >= hours.open && currentTimeStr <= hours.close;
+  };
+
   // --- SUB-COMPONENTS ---
 
   const UserProfile = () => {
@@ -755,15 +769,24 @@ function App() {
             </div>
             <div className="filter-bar">{locations.map(loc => <button key={loc} className={`filter-btn ${filter === loc ? 'active' : ''}`} onClick={() => setFilter(loc)}>{loc}</button>)}</div>
             <div className="cafe-grid">
-              {filteredCafes.map(cafe => (
-                <div key={cafe.id} className="cafe-card" onClick={() => setSelectedCafe(cafe)}>
-                  <img src={cafe.imageUrl} className="cafe-img" alt={cafe.name} onError={e => (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=800'} />
-                  <div className="cafe-info">
-                    <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
-                    <div className="view-menu-btn"><span>View full menu</span><span>→</span></div>
+              {filteredCafes.map(cafe => {
+                const isOpen = isCafeOpen(cafe);
+                return (
+                  <div key={cafe.id} className="cafe-card" onClick={() => setSelectedCafe(cafe)}>
+                    <img src={cafe.imageUrl} className="cafe-img" alt={cafe.name} onError={e => (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=800'} />
+                    <div className="cafe-info">
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+                        <span className={`status-tag ${isOpen ? 'open' : 'closed'}`}>
+                          {isOpen ? '🟢 Open' : '🔴 Closed'}
+                        </span>
+                        <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-light)'}}>Wait: {cafe.waitingTime}m</span>
+                      </div>
+                      <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
+                      <div className="view-menu-btn"><span>View full menu</span><span>→</span></div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
@@ -773,7 +796,13 @@ function App() {
         <div className="modal-overlay" onClick={() => setSelectedCafe(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1.5rem'}}>
-              <div><h2 style={{margin: 0, color: 'var(--primary)'}}>{selectedCafe.name} Menu</h2><p className="cafe-loc" style={{margin: '5px 0 0'}}>{selectedCafe.location}</p></div>
+              <div>
+                <h2 style={{margin: 0, color: 'var(--primary)'}}>{selectedCafe.name} Menu</h2>
+                <p className="cafe-loc" style={{margin: '5px 0 0'}}>{selectedCafe.location}</p>
+                <p style={{fontSize: '0.7rem', color: '#999', marginTop: '5px', textTransform: 'uppercase', letterSpacing: '1px'}}>
+                  Sun-Thu: {selectedCafe.openingHours.regular.open}-{selectedCafe.openingHours.regular.close} | Fri: {selectedCafe.openingHours.friday.open}-{selectedCafe.openingHours.friday.close}
+                </p>
+              </div>
               <button className="filter-btn" onClick={() => setSelectedCafe(null)}>Close</button>
             </div>
             <div className="menu-grid-detailed">
