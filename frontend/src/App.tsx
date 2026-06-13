@@ -707,7 +707,6 @@ function App() {
                         <span className={`status-tag ${isOpen ? 'open' : 'closed'}`}>
                           {isOpen ? '🟢 Open' : '🔴 Closed'}
                         </span>
-                        <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-light)'}}>Wait: {cafe.waitingTime}m</span>
                       </div>
                       <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
                       <div className="view-menu-btn"><span>View full menu</span><span>→</span></div>
