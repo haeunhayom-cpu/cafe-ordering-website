@@ -1,235 +1,149 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { CAFE_DATA, Cafe } from './types';
 import './App.css';
-import { CAFE_DATA } from './types';
-import type { Cafe, MenuItem } from './types';
-
-// Types
-interface CartItem extends MenuItem {
-  quantity: number;
-}
-
-interface OrderRecord {
-  id: number;
-  queue_number: number;
-  customer: string;
-  status: string;
-  items: string[];
-  created_at: string;
-  cafe_name: string;
-}
-
-interface User {
-  username: string;
-  is_admin: boolean;
-  assigned_cafe?: string | null;
-}
 
 function App() {
-  // --- STATE ---
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [menu, setMenu] = useState<any[]>([]);
+  const [cart, setCart] = useState<any[]>([]);
+  const [cartCafeName, setCartCafeName] = useState<string | null>(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState('cart'); // cart, confirm, payment, success
+  const [activeTab, setActiveTab] = useState('home'); // home, profile
+  const [filter, setFilter] = useState('All');
+  const [selectedCafe, setSelectedCafe] = useState<any>(null);
+  const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
+  const [activeOrderQueueNumber, setActiveOrderQueueNumber] = useState<number | null>(null);
+  const [activeOrderCafe, setActiveOrderCafe] = useState<string>('');
+  const [activeOrderStatus, setActiveOrderStatus] = useState<string | null>(null);
+  const [orderHistory, setOrderHistory] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<number[]>([]);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  
-  const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [filter, setFilter] = useState('All');
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isPaying, setIsPaying] = useState(false);
-  
-  const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
-  const [activeOrderQueueNumber, setActiveOrderQueueNumber] = useState<number | null>(null);
-  const [activeOrderStatus, setActiveOrderStatus] = useState<string | null>(null);
-  const [activeOrderCafe, setActiveOrderCafe] = useState<string | null>(null);
-
-  const [selectedCafe, setSelectedCafe] = useState<Cafe | null>(null);
-  const [cartCafeName, setCartCafeName] = useState<string | null>(null);
-  const [lastAddedItem, setLastAddedItem] = useState<string | null>(null);
-  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'confirm' | 'payment' | 'success'>('cart');
-  
   const [viewMode, setViewMode] = useState<'student' | 'admin'>('student');
-  const [allOrders, setAllOrders] = useState<OrderRecord[]>([]);
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [isAddingItem, setIsAddingItem] = useState(false);
   const [adminSelectedCafe, setAdminSelectedCafe] = useState<string | null>(null);
-  const [selectedFileName, setSelectedFileName] = useState<string>('No file chosen');
+  const [allOrders, setAllOrders] = useState<any[]>([]);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [isAddingItem, setIsAddingItem] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState('No file chosen');
   const [showPassword, setShowPassword] = useState(false);
-  const [orderHistory, setOrderHistory] = useState<any[]>([]);
-  const [favorites, setFavorites] = useState<number[]>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'profile'>('home');
+  const [lastAddedItem, setLastAddedItem] = useState<string | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
 
-  // --- API FETCHERS ---
-  const loadMenu = async () => {
-    try {
-      const res = await fetch('/api/menu');
-      if (!res.ok) throw new Error(`Menu fetch failed: ${res.status}`);
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        setMenu(data);
-      }
-    } catch (err) {
-      console.error("Menu fetch error:", err);
-    }
-  };
+  // --- API CALLS ---
 
   const loadUserData = async () => {
     try {
-      const [ordersRes, favsRes] = await Promise.all([
-        fetch('/api/user/orders'),
-        fetch('/api/user/favorites')
-      ]);
-      
-      if (ordersRes.ok) {
-        const ct = ordersRes.headers.get("content-type");
-        if (ct && ct.includes("application/json")) {
-          setOrderHistory(await ordersRes.json());
-        }
-      }
-      if (favsRes.ok) {
-        const ct = favsRes.headers.get("content-type");
-        if (ct && ct.includes("application/json")) {
-          setFavorites(await favsRes.json());
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load user data:", err);
-    }
-  };
-
-  const checkAuth = async () => {
-    try {
       const res = await fetch('/api/me');
       if (res.ok) {
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const data = await res.json();
-          setUser(data);
-          if (data.is_admin) {
+        const data = await res.json();
+        setUser(data);
+        if (data.is_admin) {
             setViewMode('admin');
             if (data.assigned_cafe) setAdminSelectedCafe(data.assigned_cafe);
-          } else {
-            loadUserData();
-          }
         }
       }
-    } catch (err) {
-      console.error("Auth check failed");
-    }
+    } catch (e) {}
   };
 
-  const loadAllOrders = async () => {
+  const loadMenu = async () => {
     try {
-      const res = await fetch('/admin/api/orders');
-      if (res.ok) setAllOrders(await res.json());
-    } catch (err) {
-      console.error("Admin orders fetch error:", err);
+      const res = await fetch('/api/menu');
+      if (res.ok) setMenu(await res.json());
+    } catch (e) {}
+  };
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch('/api/user/orders');
+      if (res.ok) setOrderHistory(await res.json());
+    } catch (e) {}
+  };
+
+  const fetchFavorites = async () => {
+    try {
+      const res = await fetch('/api/user/favorites');
+      if (res.ok) setFavorites(await res.json());
+    } catch (e) {}
+  };
+
+  const fetchAllOrders = async () => {
+    if (viewMode === 'admin') {
+      try {
+        const res = await fetch('/admin/api/orders');
+        if (res.ok) setAllOrders(await res.json());
+      } catch (e) {}
     }
   };
 
   useEffect(() => {
+    loadUserData();
     loadMenu();
-    checkAuth();
   }, []);
 
   useEffect(() => {
-    let interval: any;
-    if (user?.is_admin && viewMode === 'admin') {
-      loadAllOrders();
-      interval = setInterval(loadAllOrders, 5000);
+    if (user && !user.is_admin) {
+      fetchHistory();
+      fetchFavorites();
     }
-    return () => clearInterval(interval);
+    if (user && user.is_admin) {
+      fetchAllOrders();
+      const interval = setInterval(fetchAllOrders, 5000);
+      return () => clearInterval(interval);
+    }
   }, [user, viewMode]);
 
   useEffect(() => {
-    let interval: any;
-    if (activeOrderId && activeOrderStatus !== 'ready') {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/order/${activeOrderId}`);
-          if (res.ok) {
-            const data = await res.json();
-            setActiveOrderStatus(data.status);
-          }
-        } catch (e) {}
+    if (activeOrderId) {
+      const interval = setInterval(async () => {
+        const res = await fetch(`/api/order/${activeOrderId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setActiveOrderStatus(data.status);
+        }
       }, 3000);
+      return () => clearInterval(interval);
     }
-    return () => clearInterval(interval);
-  }, [activeOrderId, activeOrderStatus]);
+  }, [activeOrderId]);
 
   // --- HANDLERS ---
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthError(null);
-    
     const formData = new FormData();
     formData.append('username', loginForm.username);
     formData.append('password', loginForm.password);
 
-    try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        body: formData
-      });
-      
-      const contentType = res.headers.get("content-type");
-      if (!res.ok) {
-        if (contentType && contentType.includes("application/json")) {
-          const data = await res.json();
-          throw new Error(data.error || 'Login failed');
-        } else {
-          const text = await res.text();
-          throw new Error(text || `Server error: ${res.status}`);
-        }
+    const res = await fetch('/api/login', { method: 'POST', body: formData });
+    if (res.ok) {
+      const data = await res.json();
+      setUser(data.user);
+      if (data.user.is_admin) {
+        setViewMode('admin');
+        if (data.user.assigned_cafe) setAdminSelectedCafe(data.user.assigned_cafe);
       }
-
-      if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        setUser(data.user);
-        if (data.user.is_admin) {
-          setViewMode('admin');
-          if (data.user.assigned_cafe) setAdminSelectedCafe(data.user.assigned_cafe);
-        } else {
-          setViewMode('student');
-          loadUserData();
-        }
-      } else {
-        throw new Error("Invalid server response format");
-      }
-    } catch (err: any) {
-      setAuthError(err.message);
+      setAuthError(null);
+    } else {
+      setAuthError('Invalid credentials');
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthError(null);
-    
     const formData = new FormData();
     formData.append('username', loginForm.username);
     formData.append('password', loginForm.password);
 
-    try {
-      const res = await fetch('/api/register', {
-        method: 'POST',
-        body: formData
-      });
-      
-      const contentType = res.headers.get("content-type");
-      if (!res.ok) {
-        if (contentType && contentType.includes("application/json")) {
-          const data = await res.json();
-          throw new Error(data.error || 'Registration failed');
-        } else {
-          const text = await res.text();
-          throw new Error(text || `Server error: ${res.status}`);
-        }
-      }
-      
-      await checkAuth();
-      setIsRegistering(false);
-    } catch (err: any) {
-      setAuthError(err.message);
+    const res = await fetch('/api/register', { method: 'POST', body: formData });
+    if (res.ok) {
+      const data = await res.json();
+      setUser({ username: loginForm.username, is_admin: false, loyalty_points: 0 });
+      setViewMode('student');
+      setAuthError(null);
+    } else {
+      const data = await res.json();
+      setAuthError(data.error || 'Registration failed');
     }
   };
 
@@ -237,92 +151,25 @@ function App() {
     await fetch('/api/logout', { method: 'POST' });
     setUser(null);
     setCart([]);
-    setActiveOrderId(null);
-    setActiveOrderStatus(null);
-    setViewMode('student');
-    setLoginForm({ username: '', password: '' });
+    setIsCheckoutOpen(false);
+    setActiveTab('home');
     setAdminSelectedCafe(null);
     setCartCafeName(null);
-    setSelectedFileName('No file chosen');
-    setIsRegistering(false);
-    setOrderHistory([]);
-    setFavorites([]);
-    setActiveTab('home');
   };
 
-  const toggleFavorite = async (itemId: number, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    try {
-      const res = await fetch('/api/user/favorites/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: itemId })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 'added') setFavorites([...favorites, itemId]);
-        else setFavorites(favorites.filter(id => id !== itemId));
-      }
-    } catch (err) {
-      console.error("Toggle favorite failed:", err);
-    }
-  };
-
-  const toggleAvailability = async (itemId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const res = await fetch(`/admin/api/menu/${itemId}/availability`, { method: 'POST' });
-      if (res.ok) {
-        loadMenu();
-      }
-    } catch (err) {
-      console.error("Failed to toggle availability:", err);
-    }
-  };
-
-  const reorder = (order: any) => {
-    const cafe = CAFE_DATA.find(c => c.name === order.cafe_name);
-    if (!cafe) return;
-    
-    setCart([]);
-    setCartCafeName(order.cafe_name);
-    
-    const newCart: CartItem[] = [];
-    order.items.forEach((item: any) => {
-      const menuItem = menu.find(m => m.id === item.id);
-      if (menuItem) {
-        const existing = newCart.find(c => c.id === menuItem.id);
-        if (existing) existing.quantity += 1;
-        else newCart.push({ ...menuItem, quantity: 1 });
-      }
-    });
-    
-    setCart(newCart);
-    setIsCheckoutOpen(true);
-    setCheckoutStep('cart');
-    setActiveTab('home');
-  };
-
-  const addToCart = (item: MenuItem, cafe: Cafe) => {
-    if (cartCafeName && cartCafeName !== cafe.name) {
-      if (!confirm(`Clear cart from ${cartCafeName} to order from ${cafe.name}?`)) return;
+  const addToCart = (item: any, cafe: any) => {
+    if (cartCafeName && cartCafeName !== cafe.name && cart.length > 0) {
+      if (!window.confirm(`You already have items from ${cartCafeName} in your cart. Switch to ${cafe.name}?`)) return;
       setCart([]);
     }
     setCartCafeName(cafe.name);
-    const existing = cart.find(c => c.id === item.id);
-    if (existing) {
-      setCart(cart.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
-    } else {
-      setCart([...cart, { ...item, quantity: 1 }]);
-    }
+    setCart(prev => {
+      const existing = prev.find(i => i.id === item.id);
+      if (existing) return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { ...item, quantity: 1 }];
+    });
     setLastAddedItem(item.name);
-    setTimeout(() => setLastAddedItem(null), 2000);
-  };
-
-  const removeFromCart = (id: number) => {
-    const newCart = cart.filter(c => c.id !== id);
-    setCart(newCart);
-    if (newCart.length === 0) setCartCafeName(null);
+    setTimeout(() => setLastAddedItem(null), 3000);
   };
 
   const updateQuantity = (id: number, delta: number) => {
@@ -337,8 +184,32 @@ function App() {
     if (newCart.length === 0) setCartCafeName(null);
   };
 
+  const removeFromCart = (id: number) => {
+    const newCart = cart.filter(i => i.id !== id);
+    setCart(newCart);
+    if (newCart.length === 0) setCartCafeName(null);
+  };
+
+  const isCoffee = (item: any) => /americano|latte|cappuccino/i.test(item.name);
+  const isPastry = (item: any) => /croissant|muffin|danish/i.test(item.name);
+
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  const coffeeCount = cart.reduce((sum, item) => sum + (isCoffee(item) ? item.quantity : 0), 0);
+  const pastryCount = cart.reduce((sum, item) => sum + (isPastry(item) ? item.quantity : 0), 0);
+
+  const comboCount = Math.min(coffeeCount, pastryCount);
+  const comboDiscount = comboCount * 5;
+
+  const redeemLoyalty = (user?.loyalty_points >= 10 && coffeeCount > 0);
+  let loyaltyDiscount = 0;
+  if (redeemLoyalty) {
+    const firstCoffee = cart.find(isCoffee);
+    if (firstCoffee) loyaltyDiscount = firstCoffee.price;
+  }
+
+  const totalPrice = subTotal - comboDiscount - loyaltyDiscount;
 
   const markReady = async (orderId: number) => {
     try {
@@ -397,7 +268,7 @@ function App() {
       const response = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_ids: itemIds, cafe_name: cafeName })
+        body: JSON.stringify({ item_ids: itemIds, cafe_name: cafeName, redeem_loyalty: redeemLoyalty })
       });
       
       const contentType = response.headers.get("content-type");
@@ -419,7 +290,8 @@ function App() {
         setCheckoutStep('success');
         setCart([]);
         setCartCafeName(null);
-        loadUserData(); // Refresh history
+        fetchHistory();
+        loadUserData();
       } else {
         throw new Error("Invalid server response during order");
       }
@@ -431,12 +303,41 @@ function App() {
     }
   };
 
+  const reorder = async (oldOrder: any) => {
+    setCartCafeName(oldOrder.cafe_name);
+    const newCart = oldOrder.items.map((it: any) => {
+        const menuItem = menu.find(m => m.id === it.id);
+        return { ...menuItem, quantity: 1 };
+    });
+    setCart(newCart);
+    setActiveTab('home');
+    setIsCheckoutOpen(true);
+    setCheckoutStep('cart');
+  };
+
+  const toggleFavorite = async (itemId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const res = await fetch('/api/user/favorites/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId })
+    });
+    if (res.ok) fetchFavorites();
+  };
+
+  const toggleAvailability = async (itemId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const res = await fetch(`/admin/api/menu/${itemId}/availability`, { method: 'POST' });
+    if (res.ok) loadMenu();
+  };
+
   const locations = useMemo(() => ['All', ...new Set(CAFE_DATA.map(c => c.location))], []);
   const filteredCafes = useMemo(() => {
     return filter === 'All' ? CAFE_DATA : CAFE_DATA.filter(c => c.location === filter);
   }, [filter]);
 
   const isCafeOpen = (cafe: Cafe) => {
+    if (!cafe.openingHours) return false;
     const now = new Date();
     const day = now.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
     const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -469,6 +370,10 @@ function App() {
           <div className="profile-info">
             <h2>{user?.username}</h2>
             <p>HUJI Student | Campus Explorer</p>
+            <div style={{marginTop: '1rem'}}>
+              <span className="badge" style={{background: 'var(--primary)', color: 'white', padding: '0.5rem 1rem', margin: 0}}>☕ Loyalty Points: {user?.loyalty_points || 0} / 10</span>
+              {user?.loyalty_points >= 10 && <p style={{color: 'var(--primary)', fontWeight: 800, marginTop: '0.8rem'}}>🎉 You have a free coffee waiting!</p>}
+            </div>
           </div>
         </div>
 
@@ -779,7 +684,9 @@ function App() {
                         <span className={`status-tag ${isOpen ? 'open' : 'closed'}`}>
                           {isOpen ? '🟢 Open' : '🔴 Closed'}
                         </span>
-                        <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-light)'}}>Wait: {cafe.waitingTime}m</span>
+                        <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-light)'}}>
+                          Hours: {cafe.openingHours?.regular.open}–{cafe.openingHours?.regular.close}
+                        </span>
                       </div>
                       <h3>{cafe.name}</h3><p className="cafe-loc">{cafe.location}</p>
                       <div className="view-menu-btn"><span>View full menu</span><span>→</span></div>
@@ -800,7 +707,7 @@ function App() {
                 <h2 style={{margin: 0, color: 'var(--primary)'}}>{selectedCafe.name} Menu</h2>
                 <p className="cafe-loc" style={{margin: '5px 0 0'}}>{selectedCafe.location}</p>
                 <p style={{fontSize: '0.7rem', color: '#999', marginTop: '5px', textTransform: 'uppercase', letterSpacing: '1px'}}>
-                  Sun-Thu: {selectedCafe.openingHours.regular.open}-{selectedCafe.openingHours.regular.close} | Fri: {selectedCafe.openingHours.friday.open}-{selectedCafe.openingHours.friday.close}
+                  Sun-Thu: {selectedCafe.openingHours?.regular.open}-{selectedCafe.openingHours?.regular.close} | Fri: {selectedCafe.openingHours?.friday.open}-{selectedCafe.openingHours?.friday.close}
                 </p>
               </div>
               <button className="filter-btn" onClick={() => setSelectedCafe(null)}>Close</button>
@@ -850,6 +757,8 @@ function App() {
                     <button className="remove-btn" onClick={() => removeFromCart(item.id)}>✕</button>
                   </div>
                 ))}</div>
+                {comboDiscount > 0 && <div style={{color: 'var(--primary)', fontWeight: 'bold', textAlign: 'right', marginTop: '1.5rem', fontSize: '1.1rem'}}>Combo Discount: -₪{comboDiscount.toFixed(2)}</div>}
+                {loyaltyDiscount > 0 && <div style={{color: 'var(--primary)', fontWeight: 'bold', textAlign: 'right', marginTop: '0.5rem', fontSize: '1.1rem'}}>Free Coffee (Loyalty): -₪{loyaltyDiscount.toFixed(2)}</div>}
                 <div className="total">Total: ₪{totalPrice.toFixed(2)}</div>
                 <button className="pay-btn" onClick={() => setCheckoutStep('confirm')} disabled={cart.length === 0}>Confirm Details →</button>
               </>
@@ -859,6 +768,8 @@ function App() {
                 <h2 style={{color: 'var(--primary)', marginBottom: '1rem'}}>Confirm Order</h2>
                 <div style={{background: 'white', border: '1px solid var(--warm-accent)', padding: '1.5rem', borderRadius: '20px', marginBottom: '2rem'}}>
                     {cart.map(item => <div key={item.id} style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem'}}><span>{item.name} x {item.quantity}</span><strong>₪{(item.price * item.quantity).toFixed(0)}</strong></div>)}
+                    {comboDiscount > 0 && <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--primary)'}}><span>Combo Discount (Coffee + Pastry)</span><strong>-₪{comboDiscount.toFixed(2)}</strong></div>}
+                    {loyaltyDiscount > 0 && <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--primary)'}}><span>Free Coffee (Loyalty Rewards)</span><strong>-₪{loyaltyDiscount.toFixed(2)}</strong></div>}
                     <div style={{borderTop: '1px solid var(--warm-accent)', marginTop: '1rem', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between'}}><strong>Total</strong><strong style={{color: 'var(--primary)', fontSize: '1.4rem'}}>₪{totalPrice.toFixed(2)}</strong></div>
                 </div>
                 <button className="pay-btn" onClick={handlePayment}>Place Order Now →</button>
