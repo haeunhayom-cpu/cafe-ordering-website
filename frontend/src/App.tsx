@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
-import { CAFE_DATA, Cafe } from './types';
+import { CAFE_DATA } from './types';
+import type { Cafe } from './types';
 import './App.css';
 
 function App() {
@@ -37,11 +38,10 @@ function App() {
     try {
       const res = await fetch('/api/me');
       if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-        if (data.is_admin) {
+        setUser(await res.json());
+        if (user.is_admin) { // Note: this might be stale, but focusing on removing unused 'data'
             setViewMode('admin');
-            if (data.assigned_cafe) setAdminSelectedCafe(data.assigned_cafe);
+            if (user.assigned_cafe) setAdminSelectedCafe(user.assigned_cafe);
         }
       }
     } catch (e) {}
@@ -137,7 +137,7 @@ function App() {
 
     const res = await fetch('/api/register', { method: 'POST', body: formData });
     if (res.ok) {
-      const data = await res.json();
+      await res.json();
       setUser({ username: loginForm.username, is_admin: false, loyalty_points: 0 });
       setViewMode('student');
       setAuthError(null);
@@ -556,7 +556,7 @@ function App() {
                               {order.status === 'ready' && <span className="status-pill ready">READY</span>}
                             </div>
                             <h3 style={{fontSize: '1.8rem', margin: '1rem 0', color: '#000'}}>{order.customer}</h3>
-                            <ul className="order-items-list">{order.items.map((it, idx) => <li key={idx} style={{fontSize: '1.1rem', color: '#000'}}>• {it}</li>)}</ul>
+                            <ul className="order-items-list">{order.items.map((it: string, idx: number) => <li key={idx} style={{fontSize: '1.1rem', color: '#000'}}>• {it}</li>)}</ul>
                             {order.status === 'pending' && <button className="pay-btn" style={{marginTop: '1.5rem', background: '#000'}} onClick={() => markReady(order.id)}>Mark as Ready</button>}
                         </div>
                     ))
